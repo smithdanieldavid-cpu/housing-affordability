@@ -1,61 +1,51 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Housing Affordability Dashboard (MVP)</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Housing Affordability Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
 </head>
 
-<body class="bg-gray-50 p-6">
-    <div class="max-w-7xl mx-auto">
-        <h1 class="text-2xl font-bold mb-4">Housing Affordability (1980–Present) — Table MVP</h1>
-        <div class="bg-white shadow rounded p-4">
-            <div class="overflow-x-auto">
-                <table id="afford-table" class="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead class="bg-gray-100">
-                        <tr id="header" class="text-left"></tr>
-                    </thead>
-                    <tbody id="rows" class="bg-white"></tbody>
-                </table>
-            </div>
+    <body class="bg-gray-50 text-gray-800 antialiased">
+
+        <div id="app" class="min-h-screen container mx-auto p-4 sm:p-8">
+
+            <header class="text-center mb-10 mt-4">
+                <h1 class="text-4xl sm:text-5xl font-extrabold text-indigo-700 tracking-tight">
+                    Housing Affordability (1980–Present)
+                </h1>
+                <p class="mt-2 text-lg text-gray-500">
+                    MVP Data Dashboard
+                </p>
+            </header>
+
+            <main class="bg-white p-6 md:p-10 rounded-xl shadow-2xl">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-700">Affordability Metrics</h2>
+
+                <div id="data-table-container" class="overflow-x-auto">
+                    <p class="text-center py-12 text-gray-400">
+                        Loading data from the backend...
+                        <br>
+                        (Table will appear here once data integration is complete.)
+                    </p>
+                </div>
+
+            </main>
+
+            <footer class="text-center mt-12 text-sm text-gray-400">
+                <p>&copy; 2025 Housing Affordability Project. Data updated daily via automated ETL pipeline.</p>
+            </footer>
         </div>
-    </div>
 
 
-    <script>
-        async function fetchData() {
-            const res = await fetch('/api/data');
-            const json = await res.json();
-            const data = json.data || json;
-            if (!data || data.length === 0) {
-                document.getElementById('rows').innerHTML = '<tr><td class="p-4">No data loaded. Run fetch_data.py to populate DB.</td></tr>'
-                return;
-            }
-            const header = document.getElementById('header');
-            header.innerHTML = '';
-            Object.keys(data[0]).forEach(col => {
-                const th = document.createElement('th');
-                th.className = 'px-4 py-2';
-                th.textContent = col;
-                header.appendChild(th);
-            });
-            const rows = document.getElementById('rows');
-            rows.innerHTML = '';
-            data.forEach(row => {
-                const tr = document.createElement('tr');
-                Object.values(row).forEach(v => {
-                    const td = document.createElement('td');
-                    td.className = 'border-t px-4 py-2';
-                    td.textContent = v === null ? '' : v;
-                    tr.appendChild(td);
-                });
-                rows.appendChild(tr);
-            });
-        }
-        fetchData();
-    </script>
-</body>
+        
+    </body>
 
 </html>
