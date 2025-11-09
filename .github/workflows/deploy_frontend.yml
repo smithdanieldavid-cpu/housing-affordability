@@ -1,0 +1,49 @@
+name: Daily Data Update (ETL)
+
+on:
+  # Cron job schedule: runs every day at 00:00 UTC
+  schedule:
+    - cron: '0 0 * * *' 
+  # Allows manual running from the Actions tab
+  workflow_dispatch:
+
+permissions:
+  # Required to read the repository contents
+  contents: write 
+
+jobs:
+  run_etl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        # CRITICAL: Need token access to push changes back
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} 
+          
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+        
+      - name: Run ETL Script to Update Data
+        # This executes your fetch_data.py script, updating housing.db
+        run: python backend/fetch_data.py
+        
+      - name: Commit and Push Changes
+        id: commit
+        run: |
+          # Check if the database file was actually updated
+          if git status --porcelain | grep -q "backend/housing.db"; then
+            echo "Database updated. Committing changes..."
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add backend/housing.db
+            git commit -m "chore(data): Daily automated data update via ETL script"
+            git push
+          else
+            echo "No changes detected in housing.db."
+          fi
