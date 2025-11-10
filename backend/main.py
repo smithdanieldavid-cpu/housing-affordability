@@ -176,8 +176,8 @@ def health_check():
     """Simple health check endpoint."""
     return {"status": "ok"}
 
-@app.get("/api/data", response_model=List[AffordabilityMetric])
-def get_all_data(db: SessionLocal = Depends(get_db)): # Use Depends to ensure a session is provided
+##@app.get("/api/data", response_model=List[AffordabilityMetric])
+##def get_all_data(db: SessionLocal = Depends(get_db)): # Use Depends to ensure a session is provided
     """
     Retrieves all raw annual housing metric data.
     """
@@ -198,8 +198,8 @@ def get_all_data(db: SessionLocal = Depends(get_db)): # Use Depends to ensure a 
         logger.error(f"Database query error in /api/data: {e}")
         raise HTTPException(status_code=500, detail="Internal server error accessing data.")
 
-@app.get("/api/government_terms", response_model=List[GovernmentTermSummary])
-def get_government_terms(db: SessionLocal = Depends(get_db)): # Use Depends for session
+##@app.get("/api/government_terms", response_model=List[GovernmentTermSummary])
+##def get_government_terms(db: SessionLocal = Depends(get_db)): # Use Depends for session
     """
     Retrieves aggregated housing metric data grouped by government party terms.
     """
