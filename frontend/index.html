@@ -44,8 +44,86 @@
             </footer>
         </div>
 
+        <script>
+            // NOTE: Replace 'http://localhost:8000' with your actual backend URL if deployed!
+            const API_URL = "http://localhost:8000/api/government_terms";
+            const container = document.getElementById('data-table-container');
 
-        
-    </body>
+            /**
+             * Renders a simple error message in the container.
+             */
+            function renderError(message) {
+                container.innerHTML = `<p class="text-center py-12 text-red-500 font-semibold">Error: ${message}</p>`;
+            }
+
+            /**
+             * Formats the raw data into an HTML table structure.
+             * @param {Array} data - The list of GovernmentTermSummary objects.
+             */
+            function renderTable(data) {
+                if (!data || data.length === 0) {
+                    container.innerHTML = `<p class="text-center py-12 text-gray-500">No political term data available.</p>`;
+                    return;
+                }
+
+                let tableHTML = `
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Party</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Years</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration (Years)</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg GPHI Score (Higher is Better)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                `;
+
+                data.forEach(term => {
+                    const rowClass = term.party === 'Labour' ? 'bg-red-50' : 'bg-blue-50'; // Simple party coloring
+                    
+                    tableHTML += `
+                        <tr class="${rowClass}">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${term.party}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${term.start_year} - ${term.end_year}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${term.duration_years}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-lg">${term.average_gphi_score.toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+
+                tableHTML += `
+                        </tbody>
+                    </table>
+                `;
+
+                container.innerHTML = tableHTML;
+            }
+
+            /**
+             * Main function to fetch data and update the DOM.
+             */
+            async function fetchData() {
+                try {
+                    const response = await fetch(API_URL);
+                    
+                    if (!response.ok) {
+                        const errorDetail = await response.json();
+                        throw new Error(errorDetail.detail || `HTTP error! Status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    renderTable(data);
+
+                } catch (error) {
+                    console.error("Failed to fetch data:", error);
+                    renderError(error.message || "Could not connect to the backend API.");
+                }
+            }
+
+            // Execute the fetch logic when the page loads
+            fetchData();
+        </script>
+        </body>
 
 </html>
