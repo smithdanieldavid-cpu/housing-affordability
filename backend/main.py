@@ -1,227 +1,240 @@
-import os
 import json
 import logging
-from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict
+import requests
+import time
+from typing import List, Dict, Any
 
-# --- SQLAlchemy Imports (Modern 2.0 Style) ---
-from sqlalchemy import create_engine, Integer, Float, String
-from sqlalchemy.orm import sessionmaker, Mapped, mapped_column, DeclarativeBase
-from sqlalchemy.sql.expression import select # Added for modern querying (though not used below, it's good practice)
+# Import the scoring and aggregation functions from the new file
+from score_calculator import calculate_gphi_score, calculate_government_terms, _get_government_party
 
-# --- Configuration & Setup ---
+# --- 1. Configuration and Global Constants ---
 
-# Define the Declarative Base (SQLAlchemy 2.0)
-class Base(DeclarativeBase):
-    pass
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging to display INFO level messages
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-# Set up database engine (using SQLite for simplicity and portability)
-DATABASE_URL = "sqlite:///./affordability.db"
-engine = create_engine(DATABASE_URL)
+# Output file path for the aggregated and scored data
+OUTPUT_FILENAME = "processed_terms.json"
 
-# Session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# API Configuration
+# ABS Data API (SDMX) endpoint for data retrieval
+ABS_API_BASE_URL = "https://data.api.abs.gov.au/rest/data"
+MAX_RETRIES = 3
 
-# --- Database Model (SQLAlchemy 2.0 Mapped) ---
-class HousingAffordability(Base):
-    """Database model for a single year's metrics."""
-    __tablename__ = "housing_metrics"
+# --- SDMX Query Parameters ---
+# Defined Dataflows and their specific SDMX keys for the desired time series.
+DATAFLOWS = {
+    # RPPI: Residential Property Price Index, Weighted Average of 8 Capital Cities
+    "RPPI": {"id": "ABS,RPPI,1.0.0", "key": "1.2.10.100.Q"}, 
     
-    # Using Mapped[] and mapped_column() for 2.0 compliance
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    year: Mapped[int] = mapped_column(Integer, unique=True, index=True, nullable=False)
-    median_price: Mapped[Optional[float]] = mapped_column(Float)
-    median_income: Mapped[Optional[float]] = mapped_column(Float)
-    affordability_index: Mapped[Optional[float]] = mapped_column(Float)
-    interest_rate: Mapped[Optional[float]] = mapped_column(Float)
-    government_party: Mapped[Optional[str]] = mapped_column(String)
-    gphi_score: Mapped[Optional[float]] = mapped_column(Float)
+    # CPI: All Groups Consumer Price Index, Weighted Average of 8 Capital Cities
+    "CPI": {"id": "ABS,CPI,1.1.0", "key": "1.1.10000.10.50.Q"},
+}
 
-# --- Pydantic Schemas (Pydantic v2) ---
 
-class AffordabilityMetric(BaseModel):
-    """Schema for annual metric data point."""
-    year: int
-    median_price: Optional[float]
-    median_income: Optional[float]
-    affordability_index: Optional[float]
-    interest_rate: Optional[float]
-    government_party: Optional[str]
-    gphi_score: Optional[float]
+# --- 2. Data Processing and Transformation Functions ---
+
+def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Parses the complex SDMX-JSON structure, aggregates quarterly data into 
+    annual averages, and calls the external scoring function.
+    """
+    logger.info("Starting SDMX-JSON data transformation.")
     
-    # Use model_config for Pydantic v2 from_attributes
-    model_config = ConfigDict(from_attributes=True)
-
-class GovernmentTermSummary(BaseModel):
-    """Schema for the aggregated government term expected by the frontend."""
-    party: str
-    start_year: int
-    end_year: int
-    duration_years: int
-    average_gphi_score: float
-    annual_metrics: List[AffordabilityMetric]
-
-# --- FastAPI Setup ---
-app = FastAPI(title="Housing Affordability API")
-
-# Add CORS middleware
-origins = ["*"]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Dependency to get a DB session
-def get_db():
-    """Provides a database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# --- Utility Functions for Aggregation ---
-
-# (The utility functions 'calculate_government_terms' and 'finalize_term' remain the same
-# as they were already logically sound and only relied on standard Python List/Dict operations.)
-
-def calculate_government_terms(raw_data: List[HousingAffordability]) -> List[GovernmentTermSummary]:
-    """
-    Processes the raw time-series data to calculate aggregate metrics for each
-    continuous period of government, as expected by the React frontend.
-    """
-    if not raw_data:
+    # Check for core data structure elements
+    series_data = raw_data.get('dataSets', [{}])[0].get('series', {})
+    if not series_data:
+        logger.error("SDMX response is missing 'dataSets' or 'series'. Cannot process.")
         return []
 
-    # Sort data by year to ensure continuity
-    sorted_data = sorted(raw_data, key=lambda x: x.year)
+    # Identify the index of the TIME_PERIOD dimension for lookup
+    time_dimension_index = -1
+    for i, dim in enumerate(raw_data.get('structure', {}).get('dimensions', {}).get('observation', [])):
+        if dim.get('id') == 'TIME_PERIOD':
+            time_dimension_index = i
+            break
+            
+    if time_dimension_index == -1:
+        logger.error("Could not find TIME_PERIOD dimension in SDMX structure.")
+        return []
 
-    terms: List[Dict[str, Any]] = []
-    current_term: Optional[Dict[str, Any]] = None
+    # 1. Aggregate quarterly data across different series types (RPPI/CPI)
+    quarterly_data: Dict[str, Dict[str, float]] = {}
+    
+    for series_key, series_value in series_data.items():
+        # Determine the metric name (rppi_index or cpi_index)
+        metric_name = series_value.get('id_prefix') # Added in fetch_housing_data
+        if not metric_name:
+            continue
+            
+        metric_field = 'rppi_index' if metric_name == 'RPPI' else 'cpi_index'
+            
+        observations = series_value.get('observations', {})
+        for time_key, obs_data in observations.items():
+            # The value is at index 0 of the observation array
+            value = float(obs_data[0]) 
 
-    for row in sorted_data:
-        # We only process years where the government party is known
-        if row.government_party:
-            party = row.government_party
+            # Look up the actual time period (e.g., '2022-Q1') using the time_key index
+            time_period = raw_data['structure']['dimensions']['observation'][time_dimension_index]['values'][int(time_key)]['id']
 
-            if not current_term or current_term['party'] != party:
-                # Finalize the previous term if it exists
-                if current_term and len(current_term['annual_metrics']) > 1:
-                    terms.append(finalize_term(current_term))
+            if time_period not in quarterly_data:
+                quarterly_data[time_period] = {}
 
-                # Start a new term
-                current_term = {
-                    'party': party,
-                    'start_year': row.year,
-                    'annual_metrics': [],
-                    'total_gphi_score': 0.0,
+            quarterly_data[time_period][metric_field] = value
+
+    # 2. Convert Quarterly Data to Annual Averages
+    annual_data: Dict[int, Dict[str, Any]] = {}
+
+    for time_period, metrics in quarterly_data.items():
+        try:
+            # Extract year from format YYYY-QX
+            year = int(time_period.split('-')[0])
+            
+            if year not in annual_data:
+                # Initialize annual record
+                annual_data[year] = {
+                    'year': year,
+                    'rppi_total': 0.0,
+                    'cpi_total': 0.0,
+                    'rppi_count': 0,
+                    'cpi_count': 0,
+                    # Get government party from the imported function
+                    'government_party': _get_government_party(year) 
                 }
             
-            # Continue the current term
-            current_term['annual_metrics'].append(row)
-            current_term['total_gphi_score'] += row.gphi_score if row.gphi_score is not None else 0.0
+            # Sum up the quarterly values
+            if 'rppi_index' in metrics:
+                annual_data[year]['rppi_total'] += metrics['rppi_index']
+                annual_data[year]['rppi_count'] += 1
+                
+            if 'cpi_index' in metrics:
+                annual_data[year]['cpi_total'] += metrics['cpi_index']
+                annual_data[year]['cpi_count'] += 1
+                
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Skipping malformed time period '{time_period}': {e}")
+            continue
+
+    # 3. Finalize Annual Data and Calculate GPHI
+    final_records: List[Dict[str, Any]] = []
+
+    for year, data in annual_data.items():
+        # Require a minimum of 2 quarters of data for a reliable annual average
+        if data['rppi_count'] >= 2 and data['cpi_count'] >= 2:
+            avg_rppi = data['rppi_total'] / data['rppi_count']
+            avg_cpi = data['cpi_total'] / data['cpi_count']
+            
+            # --- Call the external scoring function ---
+            gphi_score = calculate_gphi_score(avg_rppi, avg_cpi)
+            
+            final_records.append({
+                'year': year,
+                'avg_rppi_index': round(avg_rppi, 2),
+                'avg_cpi_index': round(avg_cpi, 2),
+                'gphi_score': gphi_score,
+                'government_party': data['government_party']
+            })
         else:
-            # If a row has no government_party, it breaks the current term continuity
-            if current_term and len(current_term['annual_metrics']) > 1:
-                terms.append(finalize_term(current_term))
-                current_term = None # Reset current term
+            logger.info(f"Skipping year {year}: Insufficient quarterly data ({data['rppi_count']} RPPI, {data['cpi_count']} CPI).")
 
-    # Finalize the last term
-    if current_term and len(current_term['annual_metrics']) > 1:
-        terms.append(finalize_term(current_term))
+
+    logger.info(f"Transformation complete. Generated {len(final_records)} annual records.")
+    return final_records
+
+
+def fetch_housing_data() -> List[Dict[str, Any]]:
+    """
+    Fetches raw housing and economic data using the ABS Data API. 
+    It makes sequential calls for RPPI and CPI and merges the results.
+    """
+    combined_raw_data: Dict[str, Any] = {}
+    
+    for metric_name, config in DATAFLOWS.items():
+        dataflow_id = config['id']
+        data_key = config['key']
         
-    # Convert dictionaries to Pydantic models
-    return [GovernmentTermSummary(**term) for term in terms]
+        # Request data from 2000 to present, full detail, JSON format.
+        api_url = f"{ABS_API_BASE_URL}/{dataflow_id}/{data_key}?startPeriod=2000&format=jsondata&detail=full"
+        
+        logger.info(f"Attempting to fetch {metric_name} data from ABS API at: {dataflow_id}")
 
-def finalize_term(term: Dict[str, Any]) -> Dict[str, Any]:
-    """Calculates summary stats for a finalized term."""
-    term_data = term['annual_metrics']
-    count = len(term_data)
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = requests.get(api_url, timeout=30)
+                response.raise_for_status() 
 
-    # Convert SQLAlchemy objects to Pydantic models for the nested list
-    # The .from_orm() method is now .model_validate() in Pydantic v2 for non-BaseModel instances, 
-    # but since data models are configured with from_attributes=True, it will still work, 
-    # though model_validate is the modern v2 way. Using .model_validate(d.dict()) or similar is safer
-    # but .from_orm is fine for now if you are using Pydantic compatibility mode.
-    annual_metrics_pydantic = [AffordabilityMetric.model_validate(d) for d in term_data]
+                raw_api_data = response.json()
+                logger.info(f"Successfully received {metric_name} data on attempt {attempt + 1}.")
+                
+                # Merge logic: SDMX format is tricky; we combine the series into one dictionary.
+                if not combined_raw_data:
+                    # First metric: store the whole structure
+                    combined_raw_data = raw_api_data
+                else:
+                    # Subsequent metrics: merge the new series into the existing dataSets[0].series
+                    new_series = raw_api_data.get('dataSets', [{}])[0].get('series', {})
+                    combined_raw_data['dataSets'][0]['series'].update(new_series)
+                
+                # Add an identifier to the series keys to help the parser distinguish RPPI vs CPI
+                for key, series_data in combined_raw_data['dataSets'][0]['series'].items():
+                    if 'id_prefix' not in series_data:
+                        if 'RPPI' in dataflow_id:
+                             series_data['id_prefix'] = 'RPPI'
+                        elif 'CPI' in dataflow_id:
+                             series_data['id_prefix'] = 'CPI'
+                
+                break 
+
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"HTTP Error on attempt {attempt + 1} for {metric_name}: {e.response.status_code} - {e.response.reason}")
+            except requests.exceptions.ConnectionError:
+                logger.error(f"Connection Error on attempt {attempt + 1} for {metric_name}.")
+            except requests.exceptions.Timeout:
+                logger.error(f"Timeout Error on attempt {attempt + 1} for {metric_name}.")
+            except Exception as e:
+                logger.error(f"An unexpected error occurred on attempt {attempt + 1} for {metric_name}: {e}")
+
+            if attempt < MAX_RETRIES - 1:
+                delay = 2 ** attempt
+                logger.info(f"Retrying {metric_name} in {delay} seconds...")
+                time.sleep(delay)
+        else:
+            logger.error(f"Failed to fetch {metric_name} data after {MAX_RETRIES} attempts. Cannot proceed.")
+            return [] 
+
+    # Transform the combined raw data
+    return _transform_abs_data(combined_raw_data)
 
 
-    # Calculate average GPHI score
-    avg_gphi = term['total_gphi_score'] / count
+# --- 3. Main Workflow ---
 
-    return {
-        'party': term['party'],
-        'start_year': term['start_year'],
-        'end_year': term_data[-1].year,
-        'duration_years': term_data[-1].year - term['start_year'] + 1,
-        'average_gphi_score': round(avg_gphi, 2),
-        'annual_metrics': annual_metrics_pydantic,
-    }
-
-
-# --- API Endpoints ---
-
-@app.get("/health", response_model=Dict[str, str])
-def health_check():
-    """Simple health check endpoint."""
-    return {"status": "ok"}
-
-##@app.get("/api/data", response_model=List[AffordabilityMetric])
-##def get_all_data(db: SessionLocal = Depends(get_db)): # Use Depends to ensure a session is provided
-    """
-    Retrieves all raw annual housing metric data.
-    """
+def main():
+    """The main execution flow: fetch, process, sort, and save the data."""
     try:
-        # Use db.scalars() and select() for modern SQLAlchemy 2.0 querying
-        # If your environment is still on SQLAlchemy 1.x syntax, the old db.query().all() will work.
-        # We will keep the old syntax for compatibility, but note the 2.0 method is cleaner:
-        # data = db.scalars(select(HousingAffordability).order_by(HousingAffordability.year)).all()
-        
-        data = db.query(HousingAffordability).order_by(HousingAffordability.year).all()
-        
-        if not data:
-            raise HTTPException(status_code=404, detail="No data found in the database.")
-        
-        # FastAPI/Pydantic automatically convert the SQLAlchemy model objects to the response_model
-        return data
-    except Exception as e:
-        logger.error(f"Database query error in /api/data: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error accessing data.")
+        # 1. Fetch raw data from ABS and transform it
+        raw_data = fetch_housing_data()
+        logger.info(f"Successfully loaded {len(raw_data)} transformed annual data points.")
 
-##@app.get("/api/government_terms", response_model=List[GovernmentTermSummary])
-##def get_government_terms(db: SessionLocal = Depends(get_db)): # Use Depends for session
-    """
-    Retrieves aggregated housing metric data grouped by government party terms.
-    """
-    try:
-        # Get all raw data
-        raw_data = db.query(HousingAffordability).order_by(HousingAffordability.year).all()
-        if not raw_data:
-            raise HTTPException(status_code=404, detail="No raw data available to calculate terms.")
-        
-        # Calculate and return aggregated terms
+        # 2. Score and calculate aggregated terms (using imported function)
         terms_summary = calculate_government_terms(raw_data)
-        
+
         if not terms_summary:
-             raise HTTPException(status_code=404, detail="Data was found but could not be grouped into political terms.")
-
-        # Sort the final output by average GPHI score (highest first) for the frontend
-        terms_summary.sort(key=lambda x: x.average_gphi_score, reverse=True)
+            logger.warning("No complete government terms were generated from the data.")
         
-        return terms_summary
+        # 3. Sort the final output by average GPHI score (highest first = better performance)
+        terms_summary.sort(key=lambda x: x.get('average_gphi_score', 0), reverse=True)
 
-    except HTTPException:
-        raise
+        # 4. Write to JSON file
+        with open(OUTPUT_FILENAME, 'w') as f:
+            json.dump(terms_summary, f, indent=4)
+        
+        logger.info(f"Successfully processed and saved {len(terms_summary)} government terms to {OUTPUT_FILENAME}")
+
     except Exception as e:
-        logger.error(f"Error processing government terms: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error during data aggregation.")
+        logger.error(f"A critical error occurred during the data pipeline execution: {e}")
+
+
+# --- 4. Execution Entry Point ---
+
+if __name__ == "__main__":
+    main()
