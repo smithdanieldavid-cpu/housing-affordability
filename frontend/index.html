@@ -7,123 +7,315 @@
     <title>Housing Affordability Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Using Inter font, set via Tailwind config or CDN default */
         :root {
             font-family: 'Inter', sans-serif;
+        }
+        
+        /* Define custom color variables for the theme */
+        .tailwind-theme {
+            --color-primary-dark: #1f2937; /* Dark Gray 800 */
+            --color-accent-orange: #f97316; /* Orange 600 */
+            --color-accent-yellow: #facc15; /* Yellow 400 */
+        }
+
+        /* Apply custom colors using CSS variables */
+        .bg-primary-dark { background-color: var(--color-primary-dark); }
+        .text-accent-orange { color: var(--color-accent-orange); }
+        .text-accent-yellow { color: var(--color-accent-yellow); }
+
+        /* Ensure smooth scrolling for anchors in the nav */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Set table font size slightly smaller for denser data display */
+        .data-table-font {
+            font-size: 0.95rem; /* Slightly smaller than default 'sm' */
         }
     </style>
 </head>
 
-    <body class="bg-gray-50 text-gray-800 antialiased">
+<body class="bg-gray-50 text-gray-800 antialiased tailwind-theme">
 
-        <div id="app" class="min-h-screen container mx-auto p-4 sm:p-8">
-
-            <header class="text-center mb-10 mt-4">
-                <h1 class="text-4xl sm:text-5xl font-extrabold text-indigo-700 tracking-tight">
-                    Housing Affordability (1980–Present)
-                </h1>
-                <p class="mt-2 text-lg text-gray-500">
-                    MVP Data Dashboard
-                </p>
-            </header>
-
-            <main class="bg-white p-6 md:p-10 rounded-xl shadow-2xl">
-                <h2 class="text-2xl font-semibold mb-4 text-gray-700">Affordability Metrics</h2>
-
-                <div id="data-table-container" class="overflow-x-auto">
-                    <p class="text-center py-12 text-gray-400">
-                        Loading data from the backend...
-                        <br>
-                        (Table will appear here once data integration is complete.)
-                    </p>
+    <nav class="bg-primary-dark shadow-2xl sticky top-0 z-10">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 flex items-center">
+                        <svg class="h-8 w-8 text-accent-yellow" fill="none" viewBox="0 0 24 24" stroke="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6m-6 0h-2a1 1 0 00-1 1v-2a1 1 0 011-1h1zm4 0h-4m-4 0h2a1 1 0 001-1v-2a1 1 0 01-1-1h-1a1 1 0 00-1 1v2z"/>
+                        </svg>
+                        <span class="text-white ml-3 text-xl font-bold tracking-tight">
+                            Affordability Tracker
+                        </span>
+                    </div>
                 </div>
+                <div class="text-sm space-x-4">
+                    <a href="#metrics" class="text-accent-yellow hover:text-white px-3 py-2 rounded-md font-medium transition duration-150">Scoreboard</a>
+                    <a href="#about" class="text-gray-300 hover:text-white px-3 py-2 rounded-md font-medium transition duration-150">About GPHI</a>
+                </div>
+            </div>
+        </div>
+    </nav>
 
-            </main>
+    <div id="app" class="container mx-auto p-4 sm:p-8 max-w-6xl">
 
-            <footer class="text-center mt-12 text-sm text-gray-400">
-                <p>&copy; 2025 Housing Affordability Project. Data updated daily via automated ETL pipeline.</p>
-            </footer>
+        <header class="text-center mb-12 mt-8">
+            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-800 tracking-tight">
+                Government Performance in Housing
+            </h1>
+            <p class="mt-3 text-lg sm:text-xl text-gray-600">
+                Tracking Housing Affordability Across Political Terms (2000–Present)
+            </p>
+        </header>
+
+        <div id="about" class="bg-white p-6 md:p-10 rounded-xl shadow-lg border-t-4 border-accent-orange mb-12 transform hover:scale-[1.005] transition duration-300 ease-in-out">
+            <h2 class="text-2xl font-bold mb-4 text-accent-orange">The Cost of Unaffordability</h2>
+            <p class="text-base sm:text-lg text-gray-700 leading-relaxed">
+                Unaffordable housing is one of the greatest economic and social challenges today. When house prices decouple from wages, young people are forced to take out **longer mortgages** and save for larger deposits, which locks them out of property ownership. This shift traps household wealth in **long-term debt to banks**, redirects vast sums away from productive consumption, and exacerbates wealth inequality. The **Government Performance in Housing Index (GPHI)** measures how much house price growth exceeds CPI (inflation) growth—a score of 100 means affordability remained stable during the term.
+            </p>
         </div>
 
-        <script>
-            // NOTE: Replace 'http://localhost:8000' with your actual backend URL if deployed!
-            const API_URL = "http://localhost:8000/api/government_terms";
-            const container = document.getElementById('data-table-container');
+        <main class="bg-white p-4 md:p-8 rounded-xl shadow-2xl" id="metrics">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-700 border-b pb-4">Affordability Score by Government Term</h2>
 
-            /**
-             * Renders a simple error message in the container.
-             */
-            function renderError(message) {
-                container.innerHTML = `<p class="text-center py-12 text-red-500 font-semibold">Error: ${message}</p>`;
+            <div id="data-table-container" class="overflow-x-auto">
+                <div class="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-gray-200" id="loading-indicator">
+                    <div class="flex justify-center items-center font-medium">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-accent-orange" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Loading affordability data from the backend API...
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="text-center mt-12 mb-4 text-sm text-gray-500">
+            <div class="border-t border-gray-300 pt-6">
+                <p>&copy; 2025 Affordability Tracker. Data Source: ABS Open Data APIs.</p>
+                <p class="mt-2 text-xs text-gray-400">GPHI Score: 100 is stable affordability. Above 100 is improved, below 100 is worsened.</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // === CRITICAL API URL CONFIGURATION ===
+        // !!! IMPORTANT !!! BEFORE PUSHING TO GITHUB PAGES, REPLACE THIS PLACEHOLDER 
+        // WITH THE ACTUAL, PUBLIC DOMAIN or IP ADDRESS OF YOUR VPS.
+        // Example: "http://api.affordable-housing.com.au:8000/api/government_term"
+        const DATA_URL = "http://[YOUR-LIVE-API-IP-OR-DOMAIN]:8000/api/government_term"; 
+        // ======================================
+        
+        const container = document.getElementById('data-table-container');
+
+        /**
+         * Renders a robust error message in the container.
+         */
+        function renderError(message) {
+            let errorText = message;
+            let suggestion = "";
+            
+            // Check for common network/CORS issues
+            if (message.includes("Failed to fetch") || message.includes("network")) {
+                errorText = `Network/CORS Error: The frontend could not connect to the API.`;
+                suggestion = `
+                    <p class="mt-2 text-sm">
+                        <span class="font-semibold">Checklist:</span>
+                        <ul class="list-disc list-inside ml-4 text-left">
+                            <li>Is the backend server running with Gunicorn? (Check VPS console)</li>
+                            <li>Is the API URL correct? (Check the <code>DATA_URL</code> constant in this file)</li>
+                            <li>Is **CORS** configured in <code>backend/main.py</code> to allow access from your GitHub Pages domain?</li>
+                        </ul>
+                    </p>`;
+            } else if (message.includes("503") || message.includes("500")) {
+                errorText = `Backend Server Error: The API returned a server fault.`;
+                suggestion = `<p class="mt-2 text-sm">Check the FastAPI console logs on your VPS for errors related to data processing or the ABS API call.</p>`;
+            }
+            
+            container.innerHTML = `
+                <div class="p-6 md:p-8 text-center text-red-700 font-semibold bg-red-100 rounded-xl border-2 border-red-300 shadow-lg transition duration-300 ease-in-out">
+                    <span class="text-3xl block mb-2">🛑</span>
+                    <h3 class="text-xl font-bold mb-3">Data Loading Failed</h3>
+                    <p class="text-base mb-4">Error details: ${errorText}</p>
+                    ${suggestion}
+                </div>`;
+        }
+
+        /**
+         * Determines the styling and display name based on the political party.
+         * @param {string} party - The name of the political party.
+         * @returns {Object} - Style properties and display name.
+         */
+        function getPartyStyle(party) {
+            const normalizedParty = party.toLowerCase();
+            if (normalizedParty.includes('labour')) {
+                return { 
+                    bg: 'bg-red-600', 
+                    name: 'Labor',
+                    text: 'text-white'
+                };
+            } else if (normalizedParty.includes('conservative') || normalizedParty.includes('coalition') || normalizedParty.includes('liberal')) {
+                return { 
+                    bg: 'bg-blue-600', 
+                    name: 'Coalition (LNP)', 
+                    text: 'text-white'
+                };
+            } else {
+                return { 
+                    bg: 'bg-gray-400', 
+                    name: 'Other', 
+                    text: 'text-gray-900'
+                };
+            }
+        }
+        
+        /**
+         * Generates the GPHI score cell with color and indicator icon.
+         * @param {number} score - The GPHI score.
+         * @returns {string} - HTML string for the score cell.
+         */
+        function renderScore(score) {
+            if (score === null || isNaN(score)) {
+                return `<span class="text-gray-500 font-medium">N/A (No Data)</span>`;
+            }
+            
+            const roundedScore = score.toFixed(2);
+            let colorClass, indicatorIcon, tooltip;
+            
+            if (score > 100) {
+                // Improved Affordability
+                colorClass = 'text-emerald-600 bg-emerald-50 border-emerald-300';
+                indicatorIcon = `<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>`;
+                tooltip = 'Affordability Improved';
+            } else if (score < 100) {
+                // Worsened Affordability
+                colorClass = 'text-red-600 bg-red-50 border-red-300';
+                indicatorIcon = `<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>`;
+                tooltip = 'Affordability Worsened';
+            } else {
+                // Stable Affordability (score === 100)
+                colorClass = 'text-gray-600 bg-yellow-50 border-yellow-300';
+                indicatorIcon = `<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>`;
+                tooltip = 'Affordability Stable';
             }
 
-            /**
-             * Formats the raw data into an HTML table structure.
-             * @param {Array} data - The list of GovernmentTermSummary objects.
-             */
-            function renderTable(data) {
-                if (!data || data.length === 0) {
-                    container.innerHTML = `<p class="text-center py-12 text-gray-500">No political term data available.</p>`;
-                    return;
-                }
+            return `
+                <div class="flex items-center justify-center data-table-font font-extrabold px-3 py-1 rounded-full border ${colorClass}" title="${tooltip}">
+                    ${indicatorIcon}
+                    <span>${roundedScore}</span>
+                </div>
+            `;
+        }
 
-                let tableHTML = `
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Party</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Years</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration (Years)</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg GPHI Score (Higher is Better)</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                `;
 
-                data.forEach(term => {
-                    const rowClass = term.party === 'Labour' ? 'bg-red-50' : 'bg-blue-50'; // Simple party coloring
-                    
-                    tableHTML += `
-                        <tr class="${rowClass}">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${term.party}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${term.start_year} - ${term.end_year}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${term.duration_years}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-lg">${term.average_gphi_score.toFixed(2)}</td>
+        /**
+         * Formats the raw data into an HTML table structure.
+         * @param {Array} data - The list of GovernmentTermSummary objects.
+         */
+        function renderTable(data) {
+            if (!data || data.length === 0) {
+                container.innerHTML = `<p class="text-center py-12 text-gray-600 bg-gray-100 rounded-xl shadow-inner">No political term data available from the backend API. Please check the backend log for data fetching errors.</p>`;
+                return;
+            }
+
+            // Sort data by score (descending) to highlight the best performing terms
+            data.sort((a, b) => {
+                const scoreA = a.average_gphi_score || 0;
+                const scoreB = b.average_gphi_score || 0;
+                return scoreB - scoreA;
+            });
+
+
+            let tableHTML = `
+                <table class="min-w-full divide-y divide-gray-200 rounded-xl overflow-hidden shadow-2xl border border-gray-200">
+                    <thead class="bg-primary-dark">
+                        <tr>
+                            <th class="px-4 py-4 data-table-font text-left font-bold text-accent-yellow uppercase tracking-wider">Party / Government</th>
+                            <th class="px-4 py-4 data-table-font text-center font-bold text-accent-yellow uppercase tracking-wider">Avg GPHI Score</th>
+                            <th class="px-4 py-4 data-table-font text-left font-bold text-accent-yellow uppercase tracking-wider">Years</th>
+                            <th class="px-4 py-4 data-table-font text-right font-bold text-accent-yellow uppercase tracking-wider">Data Points (Annual)</th>
                         </tr>
-                    `;
-                });
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-100">
+            `;
 
+            data.forEach((term, index) => {
+                const partyStyle = getPartyStyle(term.government_party);
+                const scoreCell = renderScore(term.average_gphi_score);
+                
                 tableHTML += `
-                        </tbody>
-                    </table>
+                    <tr class="hover:bg-gray-50 transition duration-150 data-table-font">
+                        <td class="p-4 sm:px-6 sm:py-4 whitespace-nowrap">
+                            <div class="flex flex-col">
+                                <span class="font-bold text-lg text-gray-900">${term.government_name}</span>
+                                <span class="text-xs font-semibold ${partyStyle.text} px-2 py-0.5 mt-1 rounded-full w-fit ${partyStyle.bg}">${partyStyle.name}</span>
+                            </div>
+                        </td>
+                        <td class="p-4 sm:px-6 sm:py-4 whitespace-nowrap text-center">
+                            ${scoreCell}
+                        </td>
+                        <td class="p-4 sm:px-6 sm:py-4 whitespace-nowrap text-gray-700 font-medium">
+                            ${term.start_year} &mdash; ${term.end_year}
+                        </td>
+                        <td class="p-4 sm:px-6 sm:py-4 whitespace-nowrap text-right text-gray-500">
+                            ${term.annual_records_count}
+                        </td>
+                    </tr>
                 `;
+            });
 
-                container.innerHTML = tableHTML;
-            }
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
 
-            /**
-             * Main function to fetch data and update the DOM.
-             */
-            async function fetchData() {
-                try {
-                    const response = await fetch(API_URL);
-                    
-                    if (!response.ok) {
-                        const errorDetail = await response.json();
-                        throw new Error(errorDetail.detail || `HTTP error! Status: ${response.status}`);
-                    }
+            container.innerHTML = tableHTML;
+        }
 
-                    const data = await response.json();
-                    renderTable(data);
-
-                } catch (error) {
-                    console.error("Failed to fetch data:", error);
-                    renderError(error.message || "Could not connect to the backend API.");
+        /**
+         * Main function to fetch data and update the DOM.
+         */
+        async function fetchData() {
+            // Get the loading indicator element
+            const loadingIndicator = document.getElementById('loading-indicator');
+            
+            try {
+                console.log("Attempting to fetch data from:", DATA_URL);
+                // Fetch data from the API endpoint
+                const response = await fetch(DATA_URL);
+                
+                // Throw an error if the HTTP status is not 200-299
+                if (!response.ok) {
+                    throw new Error(`${response.status}: ${response.statusText}`);
                 }
-            }
 
-            // Execute the fetch logic when the page loads
-            fetchData();
-        </script>
-        </body>
+                const data = await response.json();
+                
+                // Remove the loading indicator
+                if (loadingIndicator) {
+                    loadingIndicator.remove();
+                }
+                
+                renderTable(data);
+
+            } catch (error) {
+                console.error("Failed to load data from API:", error);
+                // Remove the loading indicator if it still exists
+                if (loadingIndicator) {
+                    loadingIndicator.remove();
+                }
+                // Render the error message to the user
+                renderError(error.message || "Network Error: Cannot connect to API.");
+            }
+        }
+
+        // Execute the fetch logic when the page loads
+        document.addEventListener('DOMContentLoaded', fetchData);
+    </script>
+</body>
 
 </html>
