@@ -22,7 +22,7 @@ jobs:
       run: pip install requests
 
     - name: Run data builder
-      run: python build_data.py
+      run: python /backend/build_data.py
 
     - name: Commit and push results
       run: |
