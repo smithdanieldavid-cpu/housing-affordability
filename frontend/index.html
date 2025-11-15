@@ -104,17 +104,9 @@
 
     <script>
         // === CRITICAL API URL CONFIGURATION ===
-        // !!! IMPORTANT !!! BEFORE PUSHING TO GITHUB PAGES, REPLACE THIS PLACEHOLDER 
-        // WITH THE ACTUAL, PUBLIC DOMAIN or IP ADDRESS OF YOUR VPS.
-        // Example: "http://api.affordable-housing.com.au:8000/api/government_term"
-        const DATA_URL = "http://[YOUR-LIVE-API-IP-OR-DOMAIN]:8000/api/government_term"; 
-        // ======================================
-        
+        const DATA_URL = "http://10.10.10.10:8000/api/government_term";         
         const container = document.getElementById('data-table-container');
 
-        /**
-         * Renders a robust error message in the container.
-         */
         function renderError(message) {
             let errorText = message;
             let suggestion = "";
