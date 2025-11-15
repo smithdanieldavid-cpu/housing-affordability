@@ -3,13 +3,8 @@ import logging
 import requests
 import time
 from typing import List, Dict, Any, Optional
-
-# --- FastAPI Imports ---
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-
-# Import the scoring and aggregation functions from the new file
-# NOTE: Ensure 'score_calculator.py' is in the same directory!
+# The import below assumes score_calculator.py is in the same directory.
+# If you are running this from a directory above, you might need relative import adjustments.
 from score_calculator import calculate_gphi_score, calculate_government_terms, _get_government_party
 
 # --- 1. Configuration and Global Constants ---
@@ -31,6 +26,9 @@ DATAFLOWS = {
 
 # --- 2. FastAPI Setup and Caching ---
 
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
 # This creates the 'app' variable uvicorn needs
 app = FastAPI(title="Housing Affordability API", version="1.0.0")
 
@@ -38,14 +36,28 @@ app = FastAPI(title="Housing Affordability API", version="1.0.0")
 CACHED_TERMS: List[Dict[str, Any]] = []
 LAST_FETCH_TIME: float = 0.0
 
-# Add CORS middleware to allow the frontend dashboard (running locally) to access this API.
+# --- START: CRITICAL CORS FIX ---
+# We must explicitly list the domains that are allowed to make requests (your frontend).
+# This is secure and reliable.
+origins = [
+    # 1. Your custom domain
+    "https://affordable-housing.com.au", 
+    # 2. Your direct GitHub Pages domain
+    "https://smithdanieldavid-cpu.github.io", 
+    # 3. Common local development ports (for testing locally)
+    "http://localhost",
+    "http://localhost:8000",
+    "http://localhost:5500", 
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allows all origins, including the local HTML file
+    allow_origins=origins, # Use the explicit list of safe domains
     allow_credentials=True,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+# --- END: CRITICAL CORS FIX ---
 
 # --- 3. Data Processing and Transformation Functions (Modified/Integrated) ---
 
