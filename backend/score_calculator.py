@@ -6,6 +6,15 @@ import requests
 import time
 from typing import List, Dict, Any, Optional
 
+# --- Government History for Scoring ---
+GOVERNMENT_HISTORY = [
+    {'start_year': 2022, 'party': 'Labor'}, 
+    {'start_year': 2013, 'party': 'Liberal/National'}, 
+    {'start_year': 2007, 'party': 'Labor'},
+    {'start_year': 1996, 'party': 'Liberal/National'},
+]
+
+
 # -----------------------------------------------------------
 # 1. Logging Configuration
 # -----------------------------------------------------------
@@ -227,3 +236,67 @@ def load_data() -> List[Dict[str, Any]]:
 @app.get("/api/government_term")
 def get_terms():
     return load_data()
+
+# -----------------------------------------------------------
+# 9. Government Party Lookup
+# -----------------------------------------------------------
+
+def _get_government_party(year: int) -> str:
+    """Return the party governing in a given year based on history."""
+    for entry in GOVERNMENT_HISTORY:
+        if year >= entry["start_year"]:
+            return entry["party"]
+    return "Unknown"
+
+
+# -----------------------------------------------------------
+# 10. GPHi Score Calculation
+# -----------------------------------------------------------
+
+def calculate_gphi_score(rppi: float, cpi: float) -> float:
+    """
+    GPHi = (RPPI / CPI) * 100
+    Measures relative housing price inflation vs consumer inflation.
+    """
+    if cpi <= 0:
+        return 0.0
+    return round((rppi / cpi) * 100, 2)
+
+
+# -----------------------------------------------------------
+# 11. Group into Government Terms
+# -----------------------------------------------------------
+
+def calculate_government_terms(annual: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Groups rows by government party → computes averages for each term.
+    """
+    if not annual:
+        return []
+
+    terms: Dict[str, Dict[str, Any]] = {}
+
+    for row in annual:
+        party = row["government_party"]
+        bucket = terms.setdefault(
+            party,
+            {
+                "government_party": party,
+                "years": [],
+                "gphi_scores": [],
+                "average_gphi_score": 0.0,
+            },
+        )
+
+        bucket["years"].append(row["year"])
+        bucket["gphi_scores"].append(row["gphi_score"])
+
+    # Compute averages
+    for party, bucket in terms.items():
+        if bucket["gphi_scores"]:
+            bucket["average_gphi_score"] = round(
+                sum(bucket["gphi_scores"]) / len(bucket["gphi_scores"]), 2
+            )
+
+    # Convert to list
+    return list(terms.values())
