@@ -2,9 +2,14 @@ import json
 import logging
 import requests
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+# --- FastAPI Imports ---
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import the scoring and aggregation functions from the new file
+# NOTE: Ensure 'score_calculator.py' is in the same directory!
 from score_calculator import calculate_gphi_score, calculate_government_terms, _get_government_party
 
 # --- 1. Configuration and Global Constants ---
@@ -13,26 +18,36 @@ from score_calculator import calculate_gphi_score, calculate_government_terms, _
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-# Output file path for the aggregated and scored data
-OUTPUT_FILENAME = "processed_terms.json"
-
 # API Configuration
-# ABS Data API (SDMX) endpoint for data retrieval
 ABS_API_BASE_URL = "https://data.api.abs.gov.au/rest/data"
 MAX_RETRIES = 3
+CACHE_TIMEOUT_SECONDS = 3600  # 1 hour cache duration
 
-# --- SDMX Query Parameters ---
-# Defined Dataflows and their specific SDMX keys for the desired time series.
+# SDMX Query Parameters
 DATAFLOWS = {
-    # RPPI: Residential Property Price Index, Weighted Average of 8 Capital Cities
     "RPPI": {"id": "ABS,RPPI,1.0.0", "key": "1.2.10.100.Q"}, 
-    
-    # CPI: All Groups Consumer Price Index, Weighted Average of 8 Capital Cities
     "CPI": {"id": "ABS,CPI,1.1.0", "key": "1.1.10000.10.50.Q"},
 }
 
+# --- 2. FastAPI Setup and Caching ---
 
-# --- 2. Data Processing and Transformation Functions ---
+# This creates the 'app' variable uvicorn needs
+app = FastAPI(title="Housing Affordability API", version="1.0.0")
+
+# Global variables for in-memory caching
+CACHED_TERMS: List[Dict[str, Any]] = []
+LAST_FETCH_TIME: float = 0.0
+
+# Add CORS middleware to allow the frontend dashboard (running locally) to access this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows all origins, including the local HTML file
+    allow_credentials=True,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
+# --- 3. Data Processing and Transformation Functions (Modified/Integrated) ---
 
 def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
@@ -63,7 +78,7 @@ def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     
     for series_key, series_value in series_data.items():
         # Determine the metric name (rppi_index or cpi_index)
-        metric_name = series_value.get('id_prefix') # Added in fetch_housing_data
+        metric_name = series_value.get('id_prefix') 
         if not metric_name:
             continue
             
@@ -71,10 +86,7 @@ def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             
         observations = series_value.get('observations', {})
         for time_key, obs_data in observations.items():
-            # The value is at index 0 of the observation array
             value = float(obs_data[0]) 
-
-            # Look up the actual time period (e.g., '2022-Q1') using the time_key index
             time_period = raw_data['structure']['dimensions']['observation'][time_dimension_index]['values'][int(time_key)]['id']
 
             if time_period not in quarterly_data:
@@ -87,22 +99,18 @@ def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     for time_period, metrics in quarterly_data.items():
         try:
-            # Extract year from format YYYY-QX
             year = int(time_period.split('-')[0])
             
             if year not in annual_data:
-                # Initialize annual record
                 annual_data[year] = {
                     'year': year,
                     'rppi_total': 0.0,
                     'cpi_total': 0.0,
                     'rppi_count': 0,
                     'cpi_count': 0,
-                    # Get government party from the imported function
                     'government_party': _get_government_party(year) 
                 }
             
-            # Sum up the quarterly values
             if 'rppi_index' in metrics:
                 annual_data[year]['rppi_total'] += metrics['rppi_index']
                 annual_data[year]['rppi_count'] += 1
@@ -119,12 +127,10 @@ def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     final_records: List[Dict[str, Any]] = []
 
     for year, data in annual_data.items():
-        # Require a minimum of 2 quarters of data for a reliable annual average
         if data['rppi_count'] >= 2 and data['cpi_count'] >= 2:
             avg_rppi = data['rppi_total'] / data['rppi_count']
             avg_cpi = data['cpi_total'] / data['cpi_count']
             
-            # --- Call the external scoring function ---
             gphi_score = calculate_gphi_score(avg_rppi, avg_cpi)
             
             final_records.append({
@@ -142,18 +148,16 @@ def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return final_records
 
 
-def fetch_housing_data() -> List[Dict[str, Any]]:
+def fetch_housing_data() -> Optional[Dict[str, Any]]:
     """
     Fetches raw housing and economic data using the ABS Data API. 
-    It makes sequential calls for RPPI and CPI and merges the results.
+    Returns the combined raw SDMX data structure or None on critical failure.
     """
     combined_raw_data: Dict[str, Any] = {}
     
     for metric_name, config in DATAFLOWS.items():
         dataflow_id = config['id']
         data_key = config['key']
-        
-        # Request data from 2000 to present, full detail, JSON format.
         api_url = f"{ABS_API_BASE_URL}/{dataflow_id}/{data_key}?startPeriod=2000&format=jsondata&detail=full"
         
         logger.info(f"Attempting to fetch {metric_name} data from ABS API at: {dataflow_id}")
@@ -166,23 +170,23 @@ def fetch_housing_data() -> List[Dict[str, Any]]:
                 raw_api_data = response.json()
                 logger.info(f"Successfully received {metric_name} data on attempt {attempt + 1}.")
                 
-                # Merge logic: SDMX format is tricky; we combine the series into one dictionary.
+                # Merge logic for SDMX structure
                 if not combined_raw_data:
-                    # First metric: store the whole structure
                     combined_raw_data = raw_api_data
                 else:
-                    # Subsequent metrics: merge the new series into the existing dataSets[0].series
                     new_series = raw_api_data.get('dataSets', [{}])[0].get('series', {})
-                    combined_raw_data['dataSets'][0]['series'].update(new_series)
+                    if 'dataSets' in combined_raw_data and len(combined_raw_data['dataSets']) > 0:
+                        combined_raw_data['dataSets'][0]['series'].update(new_series)
                 
-                # Add an identifier to the series keys to help the parser distinguish RPPI vs CPI
-                for key, series_data in combined_raw_data['dataSets'][0]['series'].items():
-                    if 'id_prefix' not in series_data:
-                        if 'RPPI' in dataflow_id:
-                             series_data['id_prefix'] = 'RPPI'
-                        elif 'CPI' in dataflow_id:
-                             series_data['id_prefix'] = 'CPI'
-                
+                # Add an identifier to the series keys for the parser
+                for key, series_data in raw_api_data.get('dataSets', [{}])[0].get('series', {}).items():
+                     if 'id_prefix' not in series_data:
+                        series_data['id_prefix'] = metric_name 
+
+                for key, series_data in combined_raw_data.get('dataSets', [{}])[0].get('series', {}).items():
+                     if 'id_prefix' not in series_data:
+                         if 'RPPI' in dataflow_id: series_data['id_prefix'] = 'RPPI'
+                         elif 'CPI' in dataflow_id: series_data['id_prefix'] = 'CPI'
                 break 
 
             except requests.exceptions.HTTPError as e:
@@ -199,42 +203,79 @@ def fetch_housing_data() -> List[Dict[str, Any]]:
                 logger.info(f"Retrying {metric_name} in {delay} seconds...")
                 time.sleep(delay)
         else:
-            logger.error(f"Failed to fetch {metric_name} data after {MAX_RETRIES} attempts. Cannot proceed.")
-            return [] 
+            logger.error(f"Failed to fetch {metric_name} data after {MAX_RETRIES} attempts. Skipping metric.")
 
-    # Transform the combined raw data
-    return _transform_abs_data(combined_raw_data)
+    if not combined_raw_data:
+        logger.error("Failed to fetch data for all required metrics.")
+        return None
+
+    return combined_raw_data
 
 
-# --- 3. Main Workflow ---
+# --- 4. Main Data Pipeline and Caching Logic ---
 
-def main():
-    """The main execution flow: fetch, process, sort, and save the data."""
+def load_and_cache_data() -> List[Dict[str, Any]]:
+    """
+    Checks cache validity, runs the full data pipeline if the cache is stale, 
+    and updates the global cache variables.
+    """
+    global CACHED_TERMS
+    global LAST_FETCH_TIME
+
+    # Check if the cache is still valid
+    if (time.time() - LAST_FETCH_TIME) < CACHE_TIMEOUT_SECONDS and CACHED_TERMS:
+        logger.info(f"Serving data from cache. Next update in {(CACHE_TIMEOUT_SECONDS - (time.time() - LAST_FETCH_TIME)):.0f} seconds.")
+        return CACHED_TERMS
+
+    logger.info("Cache is stale or empty. Running full data pipeline to fetch new data...")
+    
     try:
-        # 1. Fetch raw data from ABS and transform it
         raw_data = fetch_housing_data()
-        logger.info(f"Successfully loaded {len(raw_data)} transformed annual data points.")
-
-        # 2. Score and calculate aggregated terms (using imported function)
-        terms_summary = calculate_government_terms(raw_data)
-
-        if not terms_summary:
-            logger.warning("No complete government terms were generated from the data.")
         
-        # 3. Sort the final output by average GPHI score (highest first = better performance)
-        terms_summary.sort(key=lambda x: x.get('average_gphi_score', 0), reverse=True)
+        if not raw_data:
+            # If fetching fails, we try to fall back to the old cache
+            raise RuntimeError("Data fetching failed for all required metrics.")
 
-        # 4. Write to JSON file
-        with open(OUTPUT_FILENAME, 'w') as f:
-            json.dump(terms_summary, f, indent=4)
+        annual_records = _transform_abs_data(raw_data)
         
-        logger.info(f"Successfully processed and saved {len(terms_summary)} government terms to {OUTPUT_FILENAME}")
+        if not annual_records:
+            raise RuntimeError("Data transformation failed or resulted in zero records.")
+
+        logger.info(f"Successfully generated {len(annual_records)} transformed annual data points.")
+
+        terms_summary = calculate_government_terms(annual_records)
+
+        # Sort the final output by average GPHI score (highest first = better performance)
+        terms_summary.sort(key=lambda x: x.get('average_gphi_score', 0) if x.get('average_gphi_score') is not None else -float('inf'), reverse=True)
+
+        # Update cache and timestamp
+        CACHED_TERMS = terms_summary
+        LAST_FETCH_TIME = time.time()
+        logger.info(f"Cache updated successfully with {len(CACHED_TERMS)} government terms.")
+
+        return CACHED_TERMS
 
     except Exception as e:
-        logger.error(f"A critical error occurred during the data pipeline execution: {e}")
+        logger.error(f"Critical error during data pipeline execution: {e}")
+        
+        # If the pipeline fails, return the old cached data if it exists, otherwise raise
+        if CACHED_TERMS:
+            logger.warning("Pipeline failed but returning stale data from cache to maintain service availability.")
+            return CACHED_TERMS
+        
+        # If no cached data is available, raise an HTTP 500 error
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Data pipeline failed to initialize or fetch fresh data: {e}. Check server logs."
+        )
 
 
-# --- 4. Execution Entry Point ---
+# --- 5. FastAPI Endpoint ---
 
-if __name__ == "__main__":
-    main()
+@app.get("/api/government_term", response_model=List[Dict[str, Any]])
+def get_government_terms():
+    """
+    API endpoint to retrieve the calculated government performance in housing terms.
+    Data is served from an in-memory cache, refreshing every 1 hour (3600 seconds).
+    """
+    return load_and_cache_data()
