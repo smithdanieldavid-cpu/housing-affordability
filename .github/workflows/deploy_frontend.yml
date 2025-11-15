@@ -2,7 +2,7 @@ name: Update Housing Data
 
 on:
   schedule:
-    - cron: "0 0 * * *"  # every day at midnight UTC
+    - cron: "0 */12 * * *"   # Every 12 hours
   workflow_dispatch:
 
 jobs:
@@ -10,24 +10,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.11"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Install dependencies
-      run: pip install requests
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
 
-    - name: Run data builder
-      run: python /backend/build_data.py
+      - name: Run data build script
+        run: python backend/build_data.py
 
-    - name: Commit and push results
-      run: |
-        git config user.name "github-actions"
-        git config user.email "actions@github.com"
-        git add data/government_term.json
-        git commit -m "Update data" || echo "No changes"
-        git push
+      - name: Commit updated JSON
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update government_term.json"
+          file_pattern: "frontend/data/government_term.json"
