@@ -1,108 +1,236 @@
-from typing import List, Optional, Dict, Any
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import json
+import logging
+import requests
+import time
+from typing import List, Dict, Any, Optional
 
-# --- Government History for Scoring ---
-# This defines the political terms used for aggregating the data.
-# The data is tracked by the party that held government at the beginning of the year.
-GOVERNMENT_HISTORY = [
-    # Starts are based on the year the government first took office in a new term.
-    {'start_year': 2022, 'party': 'Labor'}, 
-    {'start_year': 2013, 'party': 'Liberal/National'}, 
-    {'start_year': 2007, 'party': 'Labor'},
-    {'start_year': 1996, 'party': 'Liberal/National'}, # Covers the 2000s
-]
+# --- Scoring & Government Term Logic ---
+from score_calculator import (
+    calculate_gphi_score,
+    calculate_government_terms,
+    _get_government_party,
+)
 
+# -----------------------------------------------------------
+# 1. Logging Configuration
+# -----------------------------------------------------------
 
-def _get_government_party(year: int) -> str:
-    """
-    Finds the party in power for a given year based on the predefined start years.
-    This function is imported and used by the parsing logic in main.py.
-    """
-    # Iterate backwards to find the most recent start_year less than or equal to the target year
-    for i in range(len(GOVERNMENT_HISTORY) - 1, -1, -1):
-        if year >= GOVERNMENT_HISTORY[i]['start_year']:
-            return GOVERNMENT_HISTORY[i]['party']
-    return 'Unknown' 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
+# -----------------------------------------------------------
+# 2. Constants
+# -----------------------------------------------------------
 
-def calculate_gphi_score(avg_rppi: float, avg_cpi: float) -> float:
-    """
-    Calculates the Good-Government Price-to-Income Index (GPHI) score.
-    Higher score indicates better affordability.
-    
-    The score is inverted (100 - X) so that a lower raw ratio (RPPI / CPI) 
-    results in a higher final score.
-    """
-    # Calculate the raw ratio: Property Index change relative to Income Proxy change (CPI)
-    raw_ratio = avg_rppi / avg_cpi
-    
-    # Scaling Factor (0.4) is used to map the ratio to a 0-100 score range.
-    gphi_score = round(100 - (raw_ratio * 0.4), 2)
-    
-    return gphi_score
+ABS_API_BASE = "https://data.api.abs.gov.au/rest/data"
+MAX_RETRIES = 3
+CACHE_TTL = 3600  # 1 hour cache timeout
 
+DATAFLOWS = {
+    "RPPI": {
+        "id": "ABS,RPPI,1.0.0",
+        "key": "1.2.10.100.Q",
+    },
+    "CPI": {
+        "id": "ABS,CPI,1.1.0",
+        "key": "1.1.10000.10.50.Q",
+    },
+}
 
-def finalize_term(term: Dict[str, Any]) -> Dict[str, Any]:
-    """Calculates final summary statistics (average GPHI) for a completed political term."""
-    term_data = term['annual_metrics']
-    count = len(term_data)
+# -----------------------------------------------------------
+# 3. FastAPI Setup & CORS
+# -----------------------------------------------------------
 
-    if count == 0:
-        return {}
+app = FastAPI(title="Housing Affordability API", version="2.0.0")
 
-    avg_gphi = term['total_gphi_score'] / count
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://affordable-housing.com.au",
+        "https://smithdanieldavid-cpu.github.io",
+        "http://localhost",
+        "http://localhost:8000",
+        "http://localhost:5500",
+        "*",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
-    return {
-        'government_name': f"{term['party']} ({term['start_year']}-{max(a['year'] for a in term_data)})",
-        'government_party': term['party'],
-        'start_year': term['start_year'],
-        # Find the max year in the annual metrics for the end year
-        'end_year': max(a['year'] for a in term_data),
-        'duration_years': len(term_data),
-        'average_gphi_score': round(avg_gphi, 2),
-        'annual_metrics': term_data,
-    }
+# -----------------------------------------------------------
+# 4. Cache
+# -----------------------------------------------------------
 
-def calculate_government_terms(raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Aggregates the raw annual time-series data into continuous government terms."""
-    if not raw_data:
+CACHE: List[Dict[str, Any]] = []
+LAST_FETCH = 0.0
+
+# -----------------------------------------------------------
+# 5. Fetch Data from ABS
+# -----------------------------------------------------------
+
+def fetch_abs_data() -> Optional[Dict[str, Any]]:
+    """Fetches and merges SDMX-JSON for RPPI and CPI."""
+    combined = None
+
+    for metric, cfg in DATAFLOWS.items():
+        url = (
+            f"{ABS_API_BASE}/{cfg['id']}/{cfg['key']}"
+            f"?startPeriod=2000&format=jsondata&detail=full"
+        )
+        logger.info(f"Fetching {metric} from ABS…")
+
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                r = requests.get(url, timeout=30)
+                r.raise_for_status()
+                data = r.json()
+
+                # Add id_prefix to each series
+                for _, series in data.get("dataSets", [{}])[0].get("series", {}).items():
+                    series["id_prefix"] = metric
+
+                # Merge structures
+                if combined is None:
+                    combined = data
+                else:
+                    combined_series = combined["dataSets"][0]["series"]
+                    new_series = data["dataSets"][0]["series"]
+                    combined_series.update(new_series)
+
+                break  # success → break retry loop
+
+            except Exception as e:
+                logger.error(f"{metric} attempt {attempt}: {e}")
+                if attempt < MAX_RETRIES:
+                    time.sleep(2 ** attempt)
+                else:
+                    logger.error(f"Failed to fetch {metric} after {MAX_RETRIES} attempts")
+
+    return combined
+
+# -----------------------------------------------------------
+# 6. Transform SDMX → Annual Data
+# -----------------------------------------------------------
+
+def transform_abs(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extracts quarterly SDMX data and produces annual averages."""
+    if not data:
+        logger.error("No ABS data provided.")
         return []
 
-    sorted_data = sorted(raw_data, key=lambda x: x['year'])
+    series = data["dataSets"][0].get("series", {})
+    dimensions = data["structure"]["dimensions"]["observation"]
 
-    terms: List[Dict[str, Any]] = []
-    current_term: Optional[Dict[str, Any]] = None
+    # Locate TIME_PERIOD index
+    time_index = next(
+        (i for i, d in enumerate(dimensions) if d["id"] == "TIME_PERIOD"),
+        None,
+    )
+    if time_index is None:
+        logger.error("TIME_PERIOD missing in SDMX structure.")
+        return []
 
-    for row in sorted_data:
-        party = row.get('government_party')
-        gphi_score = row.get('gphi_score', 0.0)
+    quarterly: Dict[str, Dict[str, float]] = {}
 
-        # Check for valid data before processing
-        if party and party != 'Unknown' and gphi_score is not None:
-            if not current_term or current_term['party'] != party:
-                # Finalize the previous term
-                if current_term and len(current_term['annual_metrics']) > 0:
-                    terms.append(finalize_term(current_term))
+    # Loop all RPPI + CPI series
+    for _, s in series.items():
+        metric = s.get("id_prefix")
+        if metric not in ("RPPI", "CPI"):
+            continue
 
-                # Start a new term
-                current_term = {
-                    'party': party,
-                    'start_year': row['year'],
-                    'annual_metrics': [],
-                    'total_gphi_score': 0.0,
-                }
-            
-            # Add the current year's data
-            current_term['annual_metrics'].append(row)
-            current_term['total_gphi_score'] += gphi_score
-        else:
-            # End the term if the party is missing/unknown or score is invalid
-            if current_term and len(current_term['annual_metrics']) > 0:
-                terms.append(finalize_term(current_term))
-            current_term = None 
+        metric_key = "rppi_index" if metric == "RPPI" else "cpi_index"
 
-    # Finalize the last term
-    if current_term and len(current_term['annual_metrics']) > 0:
-        terms.append(finalize_term(current_term))
-        
-    # Return only non-empty, finalized terms
-    return [term for term in terms if term]
+        for obs_key, obs_val in s.get("observations", {}).items():
+            period_id = dimensions[time_index]["values"][int(obs_key)]["id"]
+            value = float(obs_val[0])
+
+            if period_id not in quarterly:
+                quarterly[period_id] = {}
+
+            quarterly[period_id][metric_key] = value
+
+    # Aggregate quarterly → annual
+    annual: Dict[int, Dict[str, Any]] = {}
+
+    for period, metrics in quarterly.items():
+        year = int(period.split("-")[0])
+
+        year_bucket = annual.setdefault(
+            year,
+            {
+                "year": year,
+                "rppi_total": 0,
+                "cpi_total": 0,
+                "rppi_count": 0,
+                "cpi_count": 0,
+                "government_party": _get_government_party(year),
+            },
+        )
+
+        if "rppi_index" in metrics:
+            year_bucket["rppi_total"] += metrics["rppi_index"]
+            year_bucket["rppi_count"] += 1
+
+        if "cpi_index" in metrics:
+            year_bucket["cpi_total"] += metrics["cpi_index"]
+            year_bucket["cpi_count"] += 1
+
+    # Final annual output
+    final = []
+    for year, d in annual.items():
+        if d["rppi_count"] < 2 or d["cpi_count"] < 2:
+            continue  # skip incomplete years
+
+        avg_rppi = d["rppi_total"] / d["rppi_count"]
+        avg_cpi = d["cpi_total"] / d["cpi_count"]
+        gphi = calculate_gphi_score(avg_rppi, avg_cpi)
+
+        final.append(
+            {
+                "year": year,
+                "avg_rppi_index": round(avg_rppi, 2),
+                "avg_cpi_index": round(avg_cpi, 2),
+                "gphi_score": gphi,
+                "government_party": d["government_party"],
+            }
+        )
+
+    final.sort(key=lambda x: x["year"])
+    logger.info(f"Generated {len(final)} annual records.")
+    return final
+
+# -----------------------------------------------------------
+# 7. Cache Wrapper
+# -----------------------------------------------------------
+
+def load_data() -> List[Dict[str, Any]]:
+    global CACHE, LAST_FETCH
+
+    if CACHE and (time.time() - LAST_FETCH) < CACHE_TTL:
+        return CACHE
+
+    raw = fetch_abs_data()
+    if not raw:
+        raise HTTPException(500, "Failed to fetch ABS data")
+
+    annual = transform_abs(raw)
+    if not annual:
+        raise HTTPException(500, "ABS transformation failed")
+
+    terms = calculate_government_terms(annual)
+    terms.sort(key=lambda t: t.get("average_gphi_score", 0), reverse=True)
+
+    CACHE = terms
+    LAST_FETCH = time.time()
+    return terms
+
+# -----------------------------------------------------------
+# 8. API Endpoint
+# -----------------------------------------------------------
+
+@app.get("/api/government_term")
+def get_terms():
+    return load_data()
