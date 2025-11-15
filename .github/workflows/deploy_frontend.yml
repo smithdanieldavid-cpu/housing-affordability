@@ -1,37 +1,33 @@
-name: Deploy Frontend to GitHub Pages
+name: Update Housing Data
+
 on:
-  # Triggers the workflow on pushes to the main branch
-  push:
-    branches: ["main"]
-  # Allows you to run this workflow manually from the Actions tab
+  schedule:
+    - cron: "0 0 * * *"  # every day at midnight UTC
   workflow_dispatch:
 
-# Sets permissions needed to publish to GitHub Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 jobs:
-  # Single job to deploy the site
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout repo
+      uses: actions/checkout@v3
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
 
-      # The crucial step: upload only the 'frontend' directory as the artifact
-      - name: Upload Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './frontend'
+    - name: Install dependencies
+      run: pip install requests
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+    - name: Run data builder
+      run: python build_data.py
+
+    - name: Commit and push results
+      run: |
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add data/government_term.json
+        git commit -m "Update data" || echo "No changes"
+        git push
