@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Housing Affordability (1980–Present)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
@@ -12,132 +13,111 @@
             background-color: #f3f4f6;
         }
     </style>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
+
 <body class="min-h-screen">
 
-    <header class="bg-indigo-700 shadow-xl">
+    <!-- HEADER -->
+    <header class="bg-gray-900 shadow-xl">
         <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
             <div class="text-white">
                 <h1 class="text-4xl font-bold tracking-tight">Housing Affordability (1980–Present)</h1>
-                <p class="text-indigo-200 mt-1">MVP Data Dashboard</p>
+                <p class="text-yellow-400 mt-1">MVP Data Dashboard</p>
             </div>
+
             <div class="flex space-x-4">
-                <a href="#" class="text-indigo-200 hover:text-white transition duration-150 ease-in-out text-sm">Login</a>
-                <a href="#" class="text-indigo-200 hover:text-white transition duration-150 ease-in-out text-sm">NAB internet bank</a>
+                <a href="#" class="text-yellow-400 hover:text-white transition text-sm font-semibold">Login</a>
             </div>
         </div>
     </header>
 
+    <!-- MAIN CONTENT -->
     <main class="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
         
-        <div class="bg-white shadow-2xl overflow-hidden rounded-xl mb-8 p-6">
+        <div class="bg-white shadow-2xl rounded-xl mb-8 p-6">
             <h2 class="text-2xl font-semibold text-orange-600 mb-3">The Cost of Unaffordability</h2>
             <p class="text-gray-700 leading-relaxed">
                 Unaffordable housing is one of the greatest economic and social challenges today. When house prices decouple from wages,
-                young people are forced to take out **"longer mortgages"** and save for larger deposits, which locks them out of property
-                ownership. This shift traps household wealth in **"long-term debt to banks"**, redirects vast sums away from productive
-                consumption, and exacerbates wealth inequality. The **"Government Performance in Housing Index (GPHI)"** measures how
+                young people are forced to take out <strong>"longer mortgages"</strong> and save for larger deposits, which locks them out of property
+                ownership. This shift traps household wealth in <strong>"long-term debt to banks"</strong>, redirects vast sums away from productive
+                consumption, and exacerbates wealth inequality. The <strong>"Government Performance in Housing Index (GPHI)"</strong> measures how
                 much house price growth exceeds CPI (inflation) growth—a score of 100 means affordability remained stable during the term.
             </p>
         </div>
 
-        <div class="bg-white shadow-2xl overflow-hidden rounded-xl p-6">
-            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Affordability Score by Government Term</h2>
-            
-            <div id="loading-indicator" class="flex items-center justify-center p-8 bg-indigo-50 rounded-lg text-indigo-700">
+        <!-- DATA TABLE CARD -->
+        <div class="bg-white shadow-2xl rounded-xl p-6">
+            <h2 class="text-2xl font-semibold text-gray-900 mb-6">Affordability Score by Government Term</h2>
+
+            <!-- Loading Indicator -->
+            <div id="loading-indicator" class="flex items-center justify-center p-8 bg-yellow-50 rounded-lg text-orange-600">
                 <i class="fas fa-spinner fa-spin mr-3"></i>
                 <span>Loading housing affordability data...</span>
             </div>
 
             <div id="table-container" class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden">
-                    <thead class="bg-indigo-100">
+                    <thead class="bg-yellow-400">
                         <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider rounded-tl-xl">
-                                Government Term
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">
-                                Party
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">
-                                Years
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-indigo-700 uppercase tracking-wider">
-                                Avg. GPHI Score (Goal: 100)
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-indigo-700 uppercase tracking-wider rounded-tr-xl">
-                                Annual Records Used
-                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider rounded-tl-xl">Government Term</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Party</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Years</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-900 uppercase tracking-wider">Avg. GPHI Score (Goal: 100)</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-900 uppercase tracking-wider rounded-tr-xl">Annual Records Used</th>
                         </tr>
                     </thead>
-                    <tbody id="data-table-body" class="bg-white divide-y divide-gray-200">
-                        </tbody>
+
+                    <tbody id="data-table-body" class="bg-white divide-y divide-gray-200"></tbody>
                 </table>
             </div>
         </div>
     </main>
 
+    <!-- FOOTER -->
     <footer class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 text-center text-gray-500 text-sm mt-8">
-        &copy; 2025 Housing Affordability Project. Data updated daily via automated ETL pipeline.
+        &copy; 2025 Housing Affordability Project — Data updated daily via automated ETL pipeline.
     </footer>
 
+    <!-- SCRIPT -->
     <script>
-        // CRITICAL API URL CONFIGURATION
         const DATA_URL = "/api/government_term";
-        // ==============================
 
-        // Utility function to determine the color and icon for the GPHI score
         function getScoreFeedback(score) {
             if (score >= 100) {
-                return {
-                    color: 'bg-green-100 text-green-800', 
-                    icon: 'fas fa-arrow-up', 
-                    tooltip: 'Affordability Improved or Stable'
-                };
+                return { color: 'bg-green-100 text-green-800', icon: 'fas fa-arrow-up', tooltip: 'Affordability Improved or Stable' };
             } else if (score >= 95) {
-                return {
-                    color: 'bg-yellow-100 text-yellow-800', 
-                    icon: 'fas fa-arrow-down', 
-                    tooltip: 'Affordability Worsened Slightly'
-                };
+                return { color: 'bg-yellow-100 text-yellow-800', icon: 'fas fa-arrow-down', tooltip: 'Affordability Worsened Slightly' };
             } else {
-                return {
-                    color: 'bg-red-100 text-red-800', 
-                    icon: 'fas fa-exclamation-triangle', 
-                    tooltip: 'Affordability Worsened Significantly'
-                };
+                return { color: 'bg-red-100 text-red-800', icon: 'fas fa-exclamation-triangle', tooltip: 'Affordability Worsened Significantly' };
             }
         }
 
-        // Function to render the fetched data into the table
         function renderTable(data) {
-            const tbody = document.getElementById('data-table-body');
-            let tableHTML = '';
+            const tbody = document.getElementById("data-table-body");
+            let tableHTML = "";
 
             data.forEach(item => {
+                const annualRecordsCount =
+                    item.annual_metrics?.length ??
+                    item.annual_records_count ??
+                    "N/A";
+
                 const feedback = getScoreFeedback(item.average_gphi_score);
-                
+
                 tableHTML += `
-                    <tr class="hover:bg-gray-50 transition duration-150 ease-in-out">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            ${item.government_name}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            ${item.government_party}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            ${item.start_year} &mdash; ${item.end_year}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${feedback.color} leading-none" title="${feedback.tooltip}">
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-6 py-4 text-sm font-medium text-gray-900">${item.government_name}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600">${item.government_party}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600">${item.start_year} — ${item.end_year}</td>
+                        <td class="px-6 py-4 text-sm text-right">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${feedback.color}" title="${feedback.tooltip}">
                                 <i class="${feedback.icon} mr-2"></i>
                                 ${item.average_gphi_score.toFixed(2)}
                             </span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
-                            ${item.annual_records_count}
-                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-600 text-right">${annualRecordsCount}</td>
                     </tr>
                 `;
             });
@@ -145,60 +125,53 @@
             tbody.innerHTML = tableHTML;
         }
 
-        // Function to display an error message
         function renderError(message) {
-            const container = document.getElementById('table-container');
+            const container = document.getElementById("table-container");
+
             container.innerHTML = `
                 <div class="p-6 bg-red-50 border border-red-200 rounded-xl">
                     <h3 class="text-xl font-bold text-red-700 mb-3">Data Loading Failed</h3>
-                    <p class="text-red-600 font-semibold mb-4">Error details: ${message}</p>
+                    <p class="text-red-600 font-semibold mb-4">Error: ${message}</p>
+
                     <div class="bg-red-100 p-4 rounded-lg text-sm text-red-800">
                         <p class="font-bold mb-2">Checklist:</p>
                         <ul class="list-disc list-inside">
                             <li>Is the backend server running?</li>
-                            <li>Is the API URL correct? (Currently set to **${DATA_URL}**)</li>
-                            <li>Are CORS headers configured correctly on the backend?</li>
+                            <li>Is the API URL correct? (Current: ${DATA_URL})</li>
+                            <li>Are CORS headers configured properly?</li>
                         </ul>
                     </div>
                 </div>
             `;
         }
 
-        // Main function to fetch data and update the DOM.
         async function fetchData() {
-            const loadingIndicator = document.getElementById('loading-indicator');
-            
+            const loadingIndicator = document.getElementById("loading-indicator");
+
             try {
                 console.log(`Attempting to fetch data from: ${DATA_URL}`);
-                const response = await fetch(DATA_URL); 
+
+                const response = await fetch(DATA_URL);
 
                 if (!response.ok) {
-                    throw new Error(`${response.status}: ${response.statusText}`);
+                    throw new Error(`${response.status} — ${response.statusText}`);
                 }
 
                 const data = await response.json();
-                
-                // Remove the loading indicator upon success
-                if (loadingIndicator) {
-                    loadingIndicator.remove();
-                }
 
+                loadingIndicator?.remove();
                 renderTable(data);
 
             } catch (error) {
-                console.error("Failed to load data from API:", error);
-                
-                // Remove the loading indicator upon failure
-                if (loadingIndicator) {
-                    loadingIndicator.remove();
-                }
-                
-                renderError(error.message || "Network Error: Could not connect to API.");
+                console.error("API fetch error:", error);
+
+                loadingIndicator?.remove();
+                renderError(error.message || "Unable to reach the API.");
             }
         }
 
-        // Execute the fetch logic when the page loads
         document.addEventListener("DOMContentLoaded", fetchData);
     </script>
+
 </body>
 </html>
