@@ -17,6 +17,7 @@ def _get_government_party(year: int) -> str:
     Finds the party in power for a given year based on the predefined start years.
     This function is imported and used by the parsing logic in main.py.
     """
+    # Iterate backwards to find the most recent start_year less than or equal to the target year
     for i in range(len(GOVERNMENT_HISTORY) - 1, -1, -1):
         if year >= GOVERNMENT_HISTORY[i]['start_year']:
             return GOVERNMENT_HISTORY[i]['party']
@@ -51,7 +52,8 @@ def finalize_term(term: Dict[str, Any]) -> Dict[str, Any]:
     avg_gphi = term['total_gphi_score'] / count
 
     return {
-        'party': term['party'],
+        'government_name': f"{term['party']} ({term['start_year']}-{max(a['year'] for a in term_data)})",
+        'government_party': term['party'],
         'start_year': term['start_year'],
         # Find the max year in the annual metrics for the end year
         'end_year': max(a['year'] for a in term_data),
@@ -74,7 +76,8 @@ def calculate_government_terms(raw_data: List[Dict[str, Any]]) -> List[Dict[str,
         party = row.get('government_party')
         gphi_score = row.get('gphi_score', 0.0)
 
-        if party and gphi_score > 0:
+        # Check for valid data before processing
+        if party and party != 'Unknown' and gphi_score is not None:
             if not current_term or current_term['party'] != party:
                 # Finalize the previous term
                 if current_term and len(current_term['annual_metrics']) > 0:
@@ -92,10 +95,10 @@ def calculate_government_terms(raw_data: List[Dict[str, Any]]) -> List[Dict[str,
             current_term['annual_metrics'].append(row)
             current_term['total_gphi_score'] += gphi_score
         else:
-            # End the term if the party or score is missing/unknown
+            # End the term if the party is missing/unknown or score is invalid
             if current_term and len(current_term['annual_metrics']) > 0:
                 terms.append(finalize_term(current_term))
-                current_term = None 
+            current_term = None 
 
     # Finalize the last term
     if current_term and len(current_term['annual_metrics']) > 0:

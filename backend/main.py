@@ -1,10 +1,14 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import json
 import logging
 import requests
 import time
 from typing import List, Dict, Any, Optional
-# The import below assumes score_calculator.py is in the same directory.
-# If you are running this from a directory above, you might need relative import adjustments.
+
+# --- REQUIRED DEPENDENCY IMPORT ---
+# This import requires the score_calculator.py file to be present and contain 
+# the specified functions (provided below as a separate file).
 from score_calculator import calculate_gphi_score, calculate_government_terms, _get_government_party
 
 # --- 1. Configuration and Global Constants ---
@@ -26,9 +30,6 @@ DATAFLOWS = {
 
 # --- 2. FastAPI Setup and Caching ---
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-
 # This creates the 'app' variable uvicorn needs
 app = FastAPI(title="Housing Affordability API", version="1.0.0")
 
@@ -38,7 +39,6 @@ LAST_FETCH_TIME: float = 0.0
 
 # --- START: CRITICAL CORS FIX ---
 # We must explicitly list the domains that are allowed to make requests (your frontend).
-# This is secure and reliable.
 origins = [
     # 1. Your custom domain
     "https://affordable-housing.com.au", 
@@ -48,6 +48,9 @@ origins = [
     "http://localhost",
     "http://localhost:8000",
     "http://localhost:5500", 
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:5500",
+    "*" # WARNING: Use '*' only for testing/development. Use specific domains in production.
 ]
 
 app.add_middleware(
@@ -143,6 +146,7 @@ def _transform_abs_data(raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             avg_rppi = data['rppi_total'] / data['rppi_count']
             avg_cpi = data['cpi_total'] / data['cpi_count']
             
+            # This calls the function from score_calculator.py
             gphi_score = calculate_gphi_score(avg_rppi, avg_cpi)
             
             final_records.append({
@@ -170,6 +174,7 @@ def fetch_housing_data() -> Optional[Dict[str, Any]]:
     for metric_name, config in DATAFLOWS.items():
         dataflow_id = config['id']
         data_key = config['key']
+        # Request data starting from the year 2000
         api_url = f"{ABS_API_BASE_URL}/{dataflow_id}/{data_key}?startPeriod=2000&format=jsondata&detail=full"
         
         logger.info(f"Attempting to fetch {metric_name} data from ABS API at: {dataflow_id}")
@@ -255,6 +260,7 @@ def load_and_cache_data() -> List[Dict[str, Any]]:
 
         logger.info(f"Successfully generated {len(annual_records)} transformed annual data points.")
 
+        # This calls the aggregation function from score_calculator.py
         terms_summary = calculate_government_terms(annual_records)
 
         # Sort the final output by average GPHI score (highest first = better performance)
@@ -284,7 +290,7 @@ def load_and_cache_data() -> List[Dict[str, Any]]:
 
 # --- 5. FastAPI Endpoint ---
 
-@app.get("/api/government_term", response_model=List[Dict[str, Any]])
+@app.get("/api/government_term")
 def get_government_terms():
     """
     API endpoint to retrieve the calculated government performance in housing terms.
