@@ -6,13 +6,6 @@ import requests
 import time
 from typing import List, Dict, Any, Optional
 
-# --- Scoring & Government Term Logic ---
-from score_calculator import (
-    calculate_gphi_score,
-    calculate_government_terms,
-    _get_government_party,
-)
-
 # -----------------------------------------------------------
 # 1. Logging Configuration
 # -----------------------------------------------------------
