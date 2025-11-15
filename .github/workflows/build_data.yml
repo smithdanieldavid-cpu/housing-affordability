@@ -1,0 +1,47 @@
+name: Build Housing Affordability Data
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"      # Runs daily at 3am UTC
+
+jobs:
+  build-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # Allows committing back to repo
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi requests pydantic uvicorn
+
+      - name: Run data build script
+        run: |
+          python backend/app.py
+
+      - name: Commit updated data
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          git add frontend/data/government_term.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Auto-update: government_term.json"
+            git push
+          fi

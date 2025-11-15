@@ -20,9 +20,11 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # Only essential dependencies are needed for the build process
           pip install -r backend/requirements.txt
 
       - name: Run data build script
+        # 🟢 CHANGED: Running the fixed build_data.py
         run: python backend/build_data.py
 
       - name: Commit updated JSON
