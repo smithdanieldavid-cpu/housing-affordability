@@ -9,18 +9,18 @@ from typing import List, Dict, Any, Optional
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-# CRITICAL FIX: Set to the official, current ABS API base URL (as per Nov 2024 update)
+# CRITICAL FIX: Set to the official, current ABS API base URL.
 ABS_API_BASE = "https://data.api.abs.gov.au/rest/data"
 MAX_RETRIES = 3
 
-# --- CORRECT ABS SDMX 2.1 Endpoints (The modern keys and IDs) ---
+# --- FINAL FIX: Using the mandatory comma-separated SDMX 2.1 format: {agencyId},{dataflowId},{version} ---
 DATAFLOWS = {
     "RPPI": {
-        "id": "ABS_RPPI_1.0.0",
+        "id": "ABS,RPPI,1.0.0",
         "key": "WGT.AUS.Q",
     },
     "CPI": {
-        "id": "ABS_CPI_1.0.0",
+        "id": "ABS,CPI,1.0.0",
         "key": "1.AUS.Q",
     },
 }
