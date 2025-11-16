@@ -16,11 +16,11 @@ MAX_RETRIES = 3
 # --- FINAL FIX: Using the mandatory comma-separated SDMX 2.1 format: {agencyId},{dataflowId},{version} ---
 DATAFLOWS = {
     "RPPI": {
-        "id": "ABS,RPPI,1.0.0",
+        "id": "ABS_RPPI_1.0.0",   # Revert to underscore format
         "key": "WGT.AUS.Q",
     },
     "CPI": {
-        "id": "ABS,CPI,1.0.0",
+        "id": "ABS_CPI_1.0.0",    # Revert to underscore format
         "key": "1.AUS.Q",
     },
 }
