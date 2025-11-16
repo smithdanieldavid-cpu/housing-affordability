@@ -16,12 +16,11 @@ MAX_RETRIES = 3
 # --- UPDATED: Dataflow IDs changed to official ABS Publication Numbers ---
 DATAFLOWS = {
     "RPPI": {
-        # REPLACED: Residential Property Price Indexes (6416.0) was discontinued in Dec Qtr 2021.
-        # Now using the replacement: Total Value of Dwellings (same publication number 6416.0).
+        # Residential Property Price Indexes, Australia (Publication 6416.0)
         "id": "6416.0",
-        # FIX: The key was WGT.AUS.Q in the runtime which is 404. 
-        # Using M1.AUS.Q which is the key for: Mean Price of Residential Dwellings, Australia, Quarterly.
-        "key": "M1.AUS.Q", 
+        # CRITICAL FIX: The previous key M1.AUS.Q was 404 Not Found.
+        # Now using A1.AUS.Q which is the key for: Weighted average of the eight capital cities Residential Property Price Index, Quarterly.
+        "key": "A1.AUS.Q", 
     },
     "CPI": {
         # Consumer Price Index, Australia (Publication 6401.0)
@@ -38,6 +37,7 @@ GOVERNMENT_HISTORY = [
 ]
 
 # ---- Import scoring and term logic from score_calculator.py ----
+# NOTE: The score_calculator module is assumed to be available in the execution environment.
 from score_calculator import calculate_gphi_score, calculate_government_terms
 
 # -----------------------------------------------------------
@@ -56,7 +56,7 @@ def _get_government_party(year: int) -> str:
 # -----------------------------------------------------------
 
 def fetch_abs_data() -> Optional[Dict[str, Any]]:
-    """Fetch RPPI (now Mean Dwelling Price) + CPI from ABS API using the required endpoint structure."""
+    """Fetch RPPI (now Residential Property Price Index) + CPI from ABS API using the required endpoint structure."""
 
     CORRECT_BASE_URL = ABS_API_BASE
 
@@ -69,6 +69,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
         logger.info(f"Fetching {metric} → {url}")
 
         success = False
+        r = None # Initialize r for scope outside try/except
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
@@ -84,7 +85,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
             except Exception as e:
                 # IMPORTANT: If we get an error, log the full error details from httpx
                 error_detail = str(e)
-                if hasattr(r, 'status_code'):
+                if r is not None and hasattr(r, 'status_code'):
                     error_detail = f"Client error '{r.status_code} {r.reason_phrase}'"
                 
                 logger.error(f"{metric} fetch failed (attempt {attempt}): {error_detail} for url: {url}")
