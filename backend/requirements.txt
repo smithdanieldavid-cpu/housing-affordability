@@ -3,17 +3,19 @@
 # ------------------------------------------------
 fastapi==0.121.1
 pydantic==2.12.3
-requests==2.32.3
+# CRITICAL FIX: Replaced 'requests' with 'httpx' for network reliability
+httpx==0.28.0  # Use a reliable, recent version of httpx
 python-dotenv==1.2.1
 
 # ------------------------------------------------
 # ASYNCHRONOUS SERVER & WORKER (Production Deployment)
 # ------------------------------------------------
+# These are only needed if you decide to deploy a persistent API backend
 uvicorn==0.38.0
 gunicorn==21.2.0
 
 # ------------------------------------------------
-# OPTIONAL (But included in your list and often useful)
+# OPTIONAL (Data Processing)
 # ------------------------------------------------
 numpy==2.3.4
 pandas==2.3.3
