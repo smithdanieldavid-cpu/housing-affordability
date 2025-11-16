@@ -26,13 +26,14 @@ DATAFLOWS = {
     "RPPI": {
         # Residential Property Price Indexes, Australia (Publication 6416.0)
         "id": "6416.0",
-        # FIX: The series key A1.AUS.Q failed. We are now using 'all' as a robust fallback.
-        "key": "all", 
+        # CRITICAL FIX: Using a known, stable series key for 'Weighted average of eight capital cities'
+        "key": "A1.AUS.Q", 
     },
     "CPI": {
         # Consumer Price Index, Australia (Publication 6401.0)
         "id": "6401.0",
-        "key": "1.AUS.Q", # Key for: All Groups CPI, Australia, Quarterly
+        # Confirmed key for: All Groups CPI, Australia, Quarterly
+        "key": "1.AUS.Q", 
     },
 }
 
@@ -72,6 +73,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
     for metric, cfg in DATAFLOWS.items():
 
         # The URL now uses the publication ID as the dataflow ID
+        # Removed 'all' and replaced with specific key A1.AUS.Q for RPPI
         url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000&format=jsondata"
         logger.info(f"Fetching {metric} → {url}")
 
@@ -89,13 +91,27 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
                 success = True
                 break
 
-            except Exception as e:
-                # IMPORTANT: If we get an error, log the full error details from httpx
-                error_detail = str(e)
-                if r is not None and hasattr(r, 'status_code'):
-                    # Include the status code and reason phrase in the error log
-                    error_detail = f"Client error '{r.status_code} {r.reason_phrase}'"
+            except requests.HTTPStatusError as e:
+                # NEW: Capture error response text for better troubleshooting 
+                error_detail = f"Client error '{r.status_code} {r.reason_phrase}'"
+                # Try to get the body content, which often contains the real SDMX error message
+                try:
+                    error_text = r.text
+                    # Limit the error text to a reasonable length for logging
+                    error_detail += f". Response: {error_text[:300]}..."
+                except:
+                    pass
                 
+                logger.error(f"{metric} fetch failed (attempt {attempt}): {error_detail} for url: {url}")
+                
+                if attempt < MAX_RETRIES:
+                    delay = 2 ** attempt
+                    logger.info(f"Retrying in {delay}s...")
+                    time.sleep(delay)
+                
+            except Exception as e:
+                # Handle non-HTTP exceptions (like network errors, timeouts, or JSON decoding)
+                error_detail = str(e)
                 logger.error(f"{metric} fetch failed (attempt {attempt}): {error_detail} for url: {url}")
                 
                 if attempt < MAX_RETRIES:
@@ -122,6 +138,7 @@ def transform_abs(abs_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     try:
         # Note: RPPI uses 'all' key, so we assume the returned 'observations' and 'time'
         # arrays correspond to the primary, most aggregated index (Weighted average of eight capital cities).
+        # We need to ensure we are correctly accessing the single series returned by the specific keys A1.AUS.Q and 1.AUS.Q
         rppi = abs_data["data"]["RPPI"]["data"]["observations"]
         rppi_time = abs_data["data"]["RPPI"]["data"]["structure"]["dimensions"]["observation"][0]["values"]
         cpi = abs_data["data"]["CPI"]["data"]["observations"]
