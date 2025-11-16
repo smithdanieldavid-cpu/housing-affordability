@@ -9,20 +9,19 @@ from typing import List, Dict, Any, Optional
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-# CRITICAL WORKAROUND: Using the OLD SDMX 1.0 endpoint URL/format 
-# because the NEW URL misdirects the request.
+# CRITICAL FIX: Set to the official, current ABS API base URL (as per Nov 2024 update)
 ABS_API_BASE = "https://data.api.abs.gov.au/rest/data"
 MAX_RETRIES = 3
 
-# --- ABS SDMX 1.0 Endpoints ---
+# --- CORRECT ABS SDMX 2.1 Endpoints (The modern keys and IDs) ---
 DATAFLOWS = {
     "RPPI": {
-        "id": "ABS,RPPI,1.0.0",
-        "key": "1.2.10.100.Q",  # RPPI – All groups, Weighted, Australia (SDMX 1.0 key)
+        "id": "ABS_RPPI_1.0.0",
+        "key": "WGT.AUS.Q",
     },
     "CPI": {
-        "id": "ABS,CPI,1.1.0",
-        "key": "1.1.10000.10.50.Q",  # CPI – All groups, Index number (SDMX 1.0 key)
+        "id": "ABS_CPI_1.0.0",
+        "key": "1.AUS.Q",
     },
 }
 
@@ -67,8 +66,8 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                # Using httpx (aliased as requests) with the resolved base URL
-                r = requests.get(url, timeout=20) 
+                # Use httpx.get with follow_redirects=True for robust network access
+                r = requests.get(url, timeout=20, follow_redirects=True) 
                 r.raise_for_status()
                 payload = r.json()
 
