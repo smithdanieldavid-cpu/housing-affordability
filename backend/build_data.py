@@ -13,14 +13,14 @@ logger = logging.getLogger(__name__)
 ABS_API_BASE = "https://data.api.abs.gov.au/rest/data"
 MAX_RETRIES = 3
 
-# --- FINAL FIX: Using the mandatory comma-separated SDMX 2.1 format: {agencyId},{dataflowId},{version} ---
+# --- FINAL FIX: Removed version number (1.0.0) from the ID to default to 'latest' ---
 DATAFLOWS = {
     "RPPI": {
-        "id": "ABS_RPPI_1.0.0",   # Revert to underscore format
+        "id": "ABS_RPPI",    # Changed from "ABS_RPPI_1.0.0"
         "key": "WGT.AUS.Q",
     },
     "CPI": {
-        "id": "ABS_CPI_1.0.0",    # Revert to underscore format
+        "id": "ABS_CPI",     # Changed from "ABS_CPI_1.0.0"
         "key": "1.AUS.Q",
     },
 }
