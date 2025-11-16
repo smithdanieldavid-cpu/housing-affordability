@@ -13,15 +13,17 @@ logger = logging.getLogger(__name__)
 ABS_API_BASE = "https://data.api.abs.gov.au/rest/data"
 MAX_RETRIES = 3
 
-# --- FINAL FIX: Removed version number (1.0.0) from the ID to default to 'latest' ---
+# --- UPDATED: Dataflow IDs changed to official ABS Publication Numbers ---
 DATAFLOWS = {
     "RPPI": {
-        "id": "ABS_RPPI",    # Changed from "ABS_RPPI_1.0.0"
-        "key": "WGT.AUS.Q",
+        # Residential Property Price Indexes, Eight Capital Cities (Publication 6416.0)
+        "id": "6416.0",
+        "key": "WGT.AUS.Q", # Key for: All Dwellings, Weighted Average of Eight Capital Cities, Quarterly
     },
     "CPI": {
-        "id": "ABS_CPI",     # Changed from "ABS_CPI_1.0.0"
-        "key": "1.AUS.Q",
+        # Consumer Price Index, Australia (Publication 6401.0)
+        "id": "6401.0",
+        "key": "1.AUS.Q", # Key for: All Groups CPI, Australia, Quarterly
     },
 }
 
@@ -52,13 +54,14 @@ def _get_government_party(year: int) -> str:
 
 def fetch_abs_data() -> Optional[Dict[str, Any]]:
     """Fetch RPPI + CPI from ABS API using the required endpoint structure."""
-    
+
     CORRECT_BASE_URL = ABS_API_BASE
-    
+
     combined = {"data": {}}
 
     for metric, cfg in DATAFLOWS.items():
 
+        # The URL now uses the publication ID as the dataflow ID
         url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000&format=jsondata"
         logger.info(f"Fetching {metric} → {url}")
 
@@ -67,7 +70,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 # Use httpx.get with follow_redirects=True for robust network access
-                r = requests.get(url, timeout=20, follow_redirects=True) 
+                r = requests.get(url, timeout=20, follow_redirects=True)
                 r.raise_for_status()
                 payload = r.json()
 
@@ -81,7 +84,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
                     delay = 2 ** attempt
                     logger.info(f"Retrying in {delay}s...")
                     time.sleep(delay)
-        
+
         if not success:
             logger.error(f"FAILED to fetch {metric} after {MAX_RETRIES} attempts")
             return None
