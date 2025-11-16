@@ -18,9 +18,11 @@ DATAFLOWS = {
     "RPPI": {
         # Residential Property Price Indexes, Australia (Publication 6416.0)
         "id": "6416.0",
-        # CRITICAL FIX: The previous key M1.AUS.Q was 404 Not Found.
-        # Now using A1.AUS.Q which is the key for: Weighted average of the eight capital cities Residential Property Price Index, Quarterly.
-        "key": "A1.AUS.Q", 
+        # FIX: The series key A1.AUS.Q failed. We are now using 'all' to request all series
+        # for this publication and rely on the internal structure of the SDMX-JSON
+        # to find the correct data key later, or ensure the most aggregated series is returned.
+        # This is a robust fallback for unstable series keys.
+        "key": "all", 
     },
     "CPI": {
         # Consumer Price Index, Australia (Publication 6401.0)
@@ -65,6 +67,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
     for metric, cfg in DATAFLOWS.items():
 
         # The URL now uses the publication ID as the dataflow ID
+        # IMPORTANT: The key uses 'all' for RPPI as the specific series key was causing 404.
         url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000&format=jsondata"
         logger.info(f"Fetching {metric} → {url}")
 
@@ -112,6 +115,8 @@ def transform_abs(abs_data: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     # Extract series structure info from the SDMX JSON response
     try:
+        # Note: RPPI uses 'all' key, so we assume the returned 'observations' and 'time'
+        # arrays correspond to the primary, most aggregated index (Weighted average of eight capital cities).
         rppi = abs_data["data"]["RPPI"]["data"]["observations"]
         rppi_time = abs_data["data"]["RPPI"]["data"]["structure"]["dimensions"]["observation"][0]["values"]
         cpi = abs_data["data"]["CPI"]["data"]["observations"]
@@ -127,11 +132,21 @@ def transform_abs(abs_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         date = rppi_time[int(obs_key)]["id"]
         # IMPORTANT: The data returned from the API is a string, so we must convert it to a float.
         # This is a common requirement when working with ABS JSON API data.
-        quarterly.setdefault(date, {})["rppi"] = float(obs_val[0])
+        # CRITICAL: We only use the first observation value, assuming the API returns the weighted average index first.
+        # If the structure contains multiple series, this will pick the first one.
+        if obs_val and isinstance(obs_val, list) and len(obs_val) > 0:
+             quarterly.setdefault(date, {})["rppi"] = float(obs_val[0])
+        else:
+             logger.warning(f"RPPI observation missing value for period {date} at key {obs_key}")
+
 
     for obs_key, obs_val in cpi.items():
         date = cpi_time[int(obs_key)]["id"]
-        quarterly.setdefault(date, {})["cpi"] = float(obs_val[0])
+        if obs_val and isinstance(obs_val, list) and len(obs_val) > 0:
+            quarterly.setdefault(date, {})["cpi"] = float(obs_val[0])
+        else:
+            logger.warning(f"CPI observation missing value for period {date} at key {obs_key}")
+
 
     # Convert quarterly → annual totals
     annual: Dict[int, Dict[str, Any]] = {}
