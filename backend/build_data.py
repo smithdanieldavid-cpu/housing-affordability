@@ -58,8 +58,8 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
     combined = {"data": {}}
 
     for metric, cfg in DATAFLOWS.items():
-        
-        url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000"
+
+        url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000&format=jsondata"
         logger.info(f"Fetching {metric} → {url}")
 
         success = False
