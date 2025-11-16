@@ -1,6 +1,6 @@
 import json
 import logging
-import requests
+import httpx as requests # Alias httpx to requests
 import time
 import os
 from typing import List, Dict, Any, Optional
@@ -54,13 +54,13 @@ def _get_government_party(year: int) -> str:
 def fetch_abs_data() -> Optional[Dict[str, Any]]:
     """Fetch RPPI + CPI from ABS API using modern SDMX v2 endpoint structure."""
     
-    # 🌟 CRITICAL FIX: Hardcode the correct base URL to isolate the request.
+    
     CORRECT_BASE_URL = "https://api.data.abs.gov.au/data"
     
     combined = {"data": {}}
 
     for metric, cfg in DATAFLOWS.items():
-        # Construct the URL using the hardcoded correct base URL
+        
         url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000"
         logger.info(f"Fetching {metric} → {url}")
 
@@ -68,7 +68,8 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                r = requests.get(url, timeout=20)
+                # Use httpx.get (aliased as requests.get)
+                r = requests.get(url, timeout=20) 
                 r.raise_for_status()
                 payload = r.json()
 
@@ -77,15 +78,18 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
                 break
 
             except Exception as e:
-                # The exception log now clearly shows the correct URL that was intended.
-                logger.error(f"{metric} attempt {attempt}: {e} for url: {r.request.url if 'r' in locals() else url}")
+                # 🟢 FIX: Added logic to handle the error and delay retries (Required Python block)
+                logger.error(f"{metric} fetch failed (attempt {attempt}): {e} for url: {url}")
                 if attempt < MAX_RETRIES:
-                    time.sleep(2 ** attempt)
-
+                    delay = 2 ** attempt
+                    logger.info(f"Retrying in {delay}s...")
+                    time.sleep(delay)
+        
         if not success:
-            logger.error(f"FAILED to fetch: {metric}")
-            return None
+            logger.error(f"FAILED to fetch {metric} after {MAX_RETRIES} attempts")
+            return None # Fail immediately if one metric could not be fetched
 
+    # 🟢 FIX: Return statement is correctly placed outside the 'for metric' loop
     return combined
 
 # -----------------------------------------------------------
