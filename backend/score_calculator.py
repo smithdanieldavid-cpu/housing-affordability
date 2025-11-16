@@ -1,8 +1,6 @@
 from typing import List, Dict, Any
 
 # --- Government History for Scoring ---
-# (Note: This constant should ideally be in main.py, but is kept here 
-# temporarily to support _get_government_party if not imported elsewhere)
 GOVERNMENT_HISTORY = [
     {'start_year': 2022, 'party': 'Labor'},
     {'start_year': 2013, 'party': 'Liberal/National'},
@@ -17,7 +15,6 @@ GOVERNMENT_HISTORY = [
 def _get_government_party(year: int) -> str:
     """Return the party governing in a given year based on history."""
     for entry in GOVERNMENT_HISTORY:
-        # Check against the start year in reverse chronological order
         if year >= entry["start_year"]:
             return entry["party"]
     return "Unknown"
@@ -30,13 +27,12 @@ def _get_government_party(year: int) -> str:
 def calculate_gphi_score(avg_rppi: float, avg_cpi: float) -> float:
     """
     Calculates the Government Housing Performance Index (GPHI) score.
-    Uses the consistent formula: 100 - (Ratio * 0.4).
+    Formula: 100 - (Ratio * 0.4).
     """
     if avg_cpi <= 0:
         return 0.0
 
     raw = avg_rppi / avg_cpi
-    # Reverting to the original scoring formula for consistency
     return round(100 - (raw * 0.4), 2)
 
 
@@ -54,7 +50,6 @@ def calculate_government_terms(annual: List[Dict[str, Any]]) -> List[Dict[str, A
     terms = []
     current = None
 
-    # Logic is updated to the correct version (aggregating consecutive terms)
     for row in annual:
         party = row["government_party"]
         score = row["gphi_score"]

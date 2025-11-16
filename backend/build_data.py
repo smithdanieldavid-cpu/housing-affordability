@@ -53,10 +53,15 @@ def _get_government_party(year: int) -> str:
 
 def fetch_abs_data() -> Optional[Dict[str, Any]]:
     """Fetch RPPI + CPI from ABS API using modern SDMX v2 endpoint structure."""
+    
+    # 🌟 CRITICAL FIX: Hardcode the correct base URL to isolate the request.
+    CORRECT_BASE_URL = "https://api.data.abs.gov.au/data"
+    
     combined = {"data": {}}
 
     for metric, cfg in DATAFLOWS.items():
-        url = f"{ABS_API_BASE}/{cfg['id']}/{cfg['key']}?startPeriod=2000"
+        # Construct the URL using the hardcoded correct base URL
+        url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000"
         logger.info(f"Fetching {metric} → {url}")
 
         success = False
@@ -72,7 +77,8 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
                 break
 
             except Exception as e:
-                logger.error(f"{metric} attempt {attempt}: {e}")
+                # The exception log now clearly shows the correct URL that was intended.
+                logger.error(f"{metric} attempt {attempt}: {e} for url: {r.request.url if 'r' in locals() else url}")
                 if attempt < MAX_RETRIES:
                     time.sleep(2 ** attempt)
 
@@ -81,7 +87,6 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
             return None
 
     return combined
-
 
 # -----------------------------------------------------------
 # 2. Transform → Annual Averages
