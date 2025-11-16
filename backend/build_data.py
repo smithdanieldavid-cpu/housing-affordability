@@ -1,6 +1,6 @@
 import json
 import logging
-import httpx as requests # Alias httpx to requests
+import httpx as requests
 import time
 import os
 from typing import List, Dict, Any, Optional
@@ -9,18 +9,20 @@ from typing import List, Dict, Any, Optional
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-ABS_API_BASE = "https://api.data.abs.gov.au/data"
+# CRITICAL WORKAROUND: Using the OLD SDMX 1.0 endpoint URL/format 
+# because the NEW URL misdirects the request.
+ABS_API_BASE = "https://data.api.abs.gov.au/rest/data"
 MAX_RETRIES = 3
 
-# --- CORRECT ABS SDMX Endpoints (Matching previous fix) ---
+# --- ABS SDMX 1.0 Endpoints ---
 DATAFLOWS = {
     "RPPI": {
-        "id": "ABS_RPPI_1.0.0",
-        "key": "WGT.AUS.Q",  # RPPI – All groups, Weighted, Australia
+        "id": "ABS,RPPI,1.0.0",
+        "key": "1.2.10.100.Q",  # RPPI – All groups, Weighted, Australia (SDMX 1.0 key)
     },
     "CPI": {
-        "id": "ABS_CPI_1.0.0",
-        "key": "1.AUS.Q",  # CPI – All groups, Index number
+        "id": "ABS,CPI,1.1.0",
+        "key": "1.1.10000.10.50.Q",  # CPI – All groups, Index number (SDMX 1.0 key)
     },
 }
 
@@ -32,8 +34,7 @@ GOVERNMENT_HISTORY = [
 ]
 
 # ---- Import scoring and term logic from score_calculator.py ----
-# NOTE: Ensure score_calculator.py is updated as provided in the last step!
-from score_calculator import calculate_gphi_score, calculate_government_terms, _finish_term
+from score_calculator import calculate_gphi_score, calculate_government_terms
 
 # -----------------------------------------------------------
 # Utility Functions
@@ -46,16 +47,14 @@ def _get_government_party(year: int) -> str:
             return g['party']
     return "Unknown"
 
-
 # -----------------------------------------------------------
 # 1. Fetch ABS Data
 # -----------------------------------------------------------
 
 def fetch_abs_data() -> Optional[Dict[str, Any]]:
-    """Fetch RPPI + CPI from ABS API using modern SDMX v2 endpoint structure."""
+    """Fetch RPPI + CPI from ABS API using the required endpoint structure."""
     
-    
-    CORRECT_BASE_URL = "https://api.data.abs.gov.au/data"
+    CORRECT_BASE_URL = ABS_API_BASE
     
     combined = {"data": {}}
 
@@ -68,7 +67,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                # Use httpx.get (aliased as requests.get)
+                # Using httpx (aliased as requests) with the resolved base URL
                 r = requests.get(url, timeout=20) 
                 r.raise_for_status()
                 payload = r.json()
@@ -78,7 +77,6 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
                 break
 
             except Exception as e:
-                # 🟢 FIX: Added logic to handle the error and delay retries (Required Python block)
                 logger.error(f"{metric} fetch failed (attempt {attempt}): {e} for url: {url}")
                 if attempt < MAX_RETRIES:
                     delay = 2 ** attempt
@@ -87,9 +85,8 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
         
         if not success:
             logger.error(f"FAILED to fetch {metric} after {MAX_RETRIES} attempts")
-            return None # Fail immediately if one metric could not be fetched
+            return None
 
-    # 🟢 FIX: Return statement is correctly placed outside the 'for metric' loop
     return combined
 
 # -----------------------------------------------------------
@@ -101,7 +98,7 @@ def transform_abs(abs_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not abs_data or "data" not in abs_data:
         return []
 
-    # Extract series structure info from the SDMX v2 JSON response
+    # Extract series structure info from the SDMX JSON response
     try:
         rppi = abs_data["data"]["RPPI"]["data"]["observations"]
         rppi_time = abs_data["data"]["RPPI"]["data"]["structure"]["dimensions"]["observation"][0]["values"]
