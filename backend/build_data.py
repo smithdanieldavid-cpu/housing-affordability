@@ -13,15 +13,20 @@ logger = logging.getLogger(__name__)
 ABS_API_BASE = "https://data.api.abs.gov.au/rest/data"
 MAX_RETRIES = 3
 
+# --- ABS API Recommended Headers for Robustness ---
+# Added based on ABS troubleshooting guide to enable compression (prevent 504/500) 
+# and provide a User-Agent (prevent 403).
+HEADERS = {
+    'Accept-Encoding': 'gzip, deflate, br',
+    'User-Agent': 'Mozilla/5.0 (Python ABS Client)'
+}
+
 # --- UPDATED: Dataflow IDs changed to official ABS Publication Numbers ---
 DATAFLOWS = {
     "RPPI": {
         # Residential Property Price Indexes, Australia (Publication 6416.0)
         "id": "6416.0",
-        # FIX: The series key A1.AUS.Q failed. We are now using 'all' to request all series
-        # for this publication and rely on the internal structure of the SDMX-JSON
-        # to find the correct data key later, or ensure the most aggregated series is returned.
-        # This is a robust fallback for unstable series keys.
+        # FIX: The series key A1.AUS.Q failed. We are now using 'all' as a robust fallback.
         "key": "all", 
     },
     "CPI": {
@@ -67,7 +72,6 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
     for metric, cfg in DATAFLOWS.items():
 
         # The URL now uses the publication ID as the dataflow ID
-        # IMPORTANT: The key uses 'all' for RPPI as the specific series key was causing 404.
         url = f"{CORRECT_BASE_URL}/{cfg['id']}/{cfg['key']}?startPeriod=2000&format=jsondata"
         logger.info(f"Fetching {metric} → {url}")
 
@@ -76,8 +80,8 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                # Use httpx.get with follow_redirects=True for robust network access
-                r = requests.get(url, timeout=20, follow_redirects=True)
+                # Use httpx.get with the recommended headers for improved reliability
+                r = requests.get(url, headers=HEADERS, timeout=20, follow_redirects=True)
                 r.raise_for_status()
                 payload = r.json()
 
@@ -89,6 +93,7 @@ def fetch_abs_data() -> Optional[Dict[str, Any]]:
                 # IMPORTANT: If we get an error, log the full error details from httpx
                 error_detail = str(e)
                 if r is not None and hasattr(r, 'status_code'):
+                    # Include the status code and reason phrase in the error log
                     error_detail = f"Client error '{r.status_code} {r.reason_phrase}'"
                 
                 logger.error(f"{metric} fetch failed (attempt {attempt}): {error_detail} for url: {url}")
@@ -130,11 +135,9 @@ def transform_abs(abs_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     # Aggregate quarterly data points
     for obs_key, obs_val in rppi.items():
         date = rppi_time[int(obs_key)]["id"]
-        # IMPORTANT: The data returned from the API is a string, so we must convert it to a float.
-        # This is a common requirement when working with ABS JSON API data.
         # CRITICAL: We only use the first observation value, assuming the API returns the weighted average index first.
-        # If the structure contains multiple series, this will pick the first one.
         if obs_val and isinstance(obs_val, list) and len(obs_val) > 0:
+             # IMPORTANT: Convert string value from API to float
              quarterly.setdefault(date, {})["rppi"] = float(obs_val[0])
         else:
              logger.warning(f"RPPI observation missing value for period {date} at key {obs_key}")
@@ -143,6 +146,7 @@ def transform_abs(abs_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     for obs_key, obs_val in cpi.items():
         date = cpi_time[int(obs_key)]["id"]
         if obs_val and isinstance(obs_val, list) and len(obs_val) > 0:
+            # IMPORTANT: Convert string value from API to float
             quarterly.setdefault(date, {})["cpi"] = float(obs_val[0])
         else:
             logger.warning(f"CPI observation missing value for period {date} at key {obs_key}")
